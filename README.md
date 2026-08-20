@@ -1,6 +1,22 @@
-# Poem Backend
+  # Poem Backend
 
 诗歌应用后端服务，基于 Go + Fuego 框架。
+
+## 📋 需求文档
+
+| 文档 | 说明 |
+|-----|------|
+| [00-overview.md](docs/00-overview.md) | 项目概述 |
+| [01-auth.md](docs/01-auth.md) | 用户模块 |
+| [02-poem.md](docs/02-poem.md) | 诗歌模块 |
+| [03-favorite.md](docs/03-favorite.md) | 收藏模块 |
+| [04-reading-plan.md](docs/04-reading-plan.md) | 阅读计划 |
+| [05-checkin.md](docs/05-checkin.md) | 打卡系统 |
+| [06-stats.md](docs/06-stats.md) | 数据统计 |
+| [07-system.md](docs/07-system.md) | 系统配置 |
+| [08-database.md](docs/08-database.md) | 数据库设计 |
+| [09-api.md](docs/09-api.md) | API 汇总 |
+| [10-non-functional.md](docs/10-non-functional.md) | 非功能需求 |
 
 ## 功能特性
 
@@ -70,15 +86,19 @@ poem-backend/
 ├── pkg/
 │   ├── database/        # 数据库连接
 │   └── response/        # 统一响应格式
-└── migrations/          # 数据库迁移
+├── migrations/          # 数据库迁移
+├── rules/               # 开发规范
+└── docs/                # 需求文档
+    └── PRD.md           # 产品需求文档
 ```
 
 ## 开发计划
 
-- [ ] 项目基础架构
-- [ ] 用户认证模块
-- [ ] 诗歌管理模块
+- [x] 项目基础架构（Config、中间件、Model）
+- [ ] 用户认证模块（登录/注册）
+- [ ] 诗歌管理模块（Admin CRUD + User 浏览）
 - [ ] 收藏功能
 - [ ] 阅读计划
 - [ ] 打卡系统
 - [ ] 数据统计
+- [ ] 系统配置（Banner/公告）
