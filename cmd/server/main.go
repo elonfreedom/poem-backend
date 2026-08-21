@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
+	"net/http"
 
 	"github.com/go-fuego/fuego"
 
@@ -9,6 +11,30 @@ import (
 	"poem-backend/internal/router"
 	"poem-backend/pkg/database"
 )
+
+// vbenErrorSerializer 自定义错误序列化（适配 vben-admin {code, message} 格式）
+func vbenErrorSerializer(w http.ResponseWriter, r *http.Request, err error) {
+	w.Header().Set("Content-Type", "application/json")
+
+	status := http.StatusInternalServerError
+	message := err.Error()
+
+	// 尝试提取 Fuego HTTPError 的状态码和标题
+	type httpError interface {
+		StatusCode() int
+		ErrorTitle() string
+	}
+	if he, ok := err.(httpError); ok {
+		status = he.StatusCode()
+		message = he.ErrorTitle()
+	}
+
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]any{
+		"code":    status,
+		"message": message,
+	})
+}
 
 func main() {
 	// Load configuration
@@ -25,6 +51,7 @@ func main() {
 	userServer := fuego.NewServer(
 		fuego.WithAddr(":8080"),
 		fuego.WithoutAutoGroupTags(),
+		fuego.WithErrorSerializer(vbenErrorSerializer),
 	)
 	router.SetupUserRoutes(userServer, db, cfg)
 
@@ -32,6 +59,7 @@ func main() {
 	adminServer := fuego.NewServer(
 		fuego.WithAddr(":8081"),
 		fuego.WithoutAutoGroupTags(),
+		fuego.WithErrorSerializer(vbenErrorSerializer),
 	)
 	router.SetupAdminRoutes(adminServer, db, cfg)
 
