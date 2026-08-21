@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 )
 
 type UserRepository struct {
@@ -17,7 +17,7 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 }
 
 // Create 创建用户
-func (r *UserRepository) Create(ctx context.Context, user *model.User) error {
+func (r *UserRepository) Create(ctx context.Context, user *usermodel.User) error {
 	query := `
 		INSERT INTO users (id, nickname, email, role, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -28,10 +28,10 @@ func (r *UserRepository) Create(ctx context.Context, user *model.User) error {
 }
 
 // GetByID 根据 ID 获取用户
-func (r *UserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {
+func (r *UserRepository) GetByID(ctx context.Context, id string) (*usermodel.User, error) {
 	query := `SELECT id, nickname, email, role, created_at, updated_at FROM users WHERE id = $1`
 	row := r.db.QueryRow(ctx, query, id)
-	var user model.User
+	var user usermodel.User
 	err := row.Scan(&user.ID, &user.Nickname, &user.Email, &user.Role, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -40,10 +40,10 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*model.User, e
 }
 
 // GetByEmail 根据邮箱获取用户
-func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*usermodel.User, error) {
 	query := `SELECT id, nickname, email, role, created_at, updated_at FROM users WHERE email = $1`
 	row := r.db.QueryRow(ctx, query, email)
-	var user model.User
+	var user usermodel.User
 	err := row.Scan(&user.ID, &user.Nickname, &user.Email, &user.Role, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.U
 }
 
 // Update 更新用户信息
-func (r *UserRepository) Update(ctx context.Context, user *model.User) error {
+func (r *UserRepository) Update(ctx context.Context, user *usermodel.User) error {
 	query := `
 		UPDATE users SET nickname = $1, email = $2, updated_at = $3
 		WHERE id = $4
@@ -69,10 +69,10 @@ func (r *UserRepository) UpdateEmail(ctx context.Context, userID string, email *
 }
 
 // GetByEmailWithPassword 根据邮箱获取用户（包含密码哈希，用于后台登录）
-func (r *UserRepository) GetByEmailWithPassword(ctx context.Context, email string) (*model.User, error) {
+func (r *UserRepository) GetByEmailWithPassword(ctx context.Context, email string) (*usermodel.User, error) {
 	query := `SELECT id, nickname, email, role, password_hash, created_at, updated_at FROM users WHERE email = $1`
 	row := r.db.QueryRow(ctx, query, email)
-	var user model.User
+	var user usermodel.User
 	err := row.Scan(&user.ID, &user.Nickname, &user.Email, &user.Role, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, err

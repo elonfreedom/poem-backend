@@ -9,9 +9,30 @@ import (
 
 // APIResponse 统一响应格式
 type APIResponse[T any] struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    T      `json:"data,omitempty"`
+	Code    int    `json:"code" description:"状态码，0 表示成功"`
+	Message string `json:"message" description:"提示信息"`
+	Data    T      `json:"data,omitempty" description:"响应数据"`
+}
+
+// PageData 分页数据（适配 vben-admin）
+type PageData[T any] struct {
+	Items []T   `json:"items" description:"列表数据"`
+	Total int64 `json:"total" description:"总条数"`
+}
+
+// OK 成功响应
+func OK[T any](data T) *APIResponse[T] {
+	return &APIResponse[T]{Code: 0, Message: "ok", Data: data}
+}
+
+// PageOK 分页成功响应
+func PageOK[T any](items []T, total int64) *APIResponse[PageData[T]] {
+	return &APIResponse[PageData[T]]{Code: 0, Message: "ok", Data: PageData[T]{Items: items, Total: total}}
+}
+
+// Err 错误响应
+func Err(code int, message string) *APIResponse[any] {
+	return &APIResponse[any]{Code: code, Message: message}
 }
 
 // writeJSON 写入 JSON 响应

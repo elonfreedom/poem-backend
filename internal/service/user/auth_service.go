@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"poem-backend/internal/middleware"
-	"poem-backend/internal/model"
+	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -45,7 +45,7 @@ func (s *AuthService) BeginRegistration(ctx context.Context, deviceName string) 
 	userID := uuid.New().String()
 	nickname := generateNickname()
 
-	user := &model.User{
+	user := &usermodel.User{
 		ID:        userID,
 		Nickname:  nickname,
 		Role:      "user",
@@ -68,7 +68,7 @@ func (s *AuthService) BeginRegistration(ctx context.Context, deviceName string) 
 }
 
 // FinishRegistration 完成注册
-func (s *AuthService) FinishRegistration(ctx context.Context, userID string, session webauthn.SessionData, r *http.Request) (*model.LoginResponse, error) {
+func (s *AuthService) FinishRegistration(ctx context.Context, userID string, session webauthn.SessionData, r *http.Request) (*usermodel.LoginResponse, error) {
 	// 获取用户
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -82,7 +82,7 @@ func (s *AuthService) FinishRegistration(ctx context.Context, userID string, ses
 	}
 
 	// 保存 Passkey
-	passkey := &model.Passkey{
+	passkey := &usermodel.Passkey{
 		UserID:       user.ID,
 		CredentialID: credential.ID,
 		PublicKey:    credential.PublicKey,
@@ -100,7 +100,7 @@ func (s *AuthService) FinishRegistration(ctx context.Context, userID string, ses
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
 
-	return &model.LoginResponse{
+	return &usermodel.LoginResponse{
 		Token: token,
 		User:  user.ToResponse(),
 	}, nil
@@ -118,7 +118,7 @@ func (s *AuthService) BeginLogin(ctx context.Context) (*protocol.CredentialAsser
 }
 
 // FinishLogin 完成登录
-func (s *AuthService) FinishLogin(ctx context.Context, session webauthn.SessionData, r *http.Request) (*model.LoginResponse, error) {
+func (s *AuthService) FinishLogin(ctx context.Context, session webauthn.SessionData, r *http.Request) (*usermodel.LoginResponse, error) {
 	// 完成 WebAuthn 登录（发现式）
 	credential, err := s.webauthn.FinishDiscoverableLogin(s.findUserHandler(ctx), session, r)
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *AuthService) FinishLogin(ctx context.Context, session webauthn.SessionD
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
 
-	return &model.LoginResponse{
+	return &usermodel.LoginResponse{
 		Token: token,
 		User:  user.ToResponse(),
 	}, nil

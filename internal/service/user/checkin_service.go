@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -18,13 +18,13 @@ func NewCheckinService(checkinRepo *repository.CheckinRepository) *CheckinServic
 }
 
 // Checkin 打卡
-func (s *CheckinService) Checkin(ctx context.Context, userID string) (*model.CheckInResponse, error) {
+func (s *CheckinService) Checkin(ctx context.Context, userID string) (*usermodel.CheckInResponse, error) {
 	today := time.Now()
 
 	// 检查今天是否已打卡
 	existing, _ := s.checkinRepo.GetByDate(ctx, userID, today)
 	if existing != nil {
-		return &model.CheckInResponse{
+		return &usermodel.CheckInResponse{
 			Date:           existing.Date,
 			ConsecutiveDay: existing.ConsecutiveDay,
 		}, nil
@@ -41,7 +41,7 @@ func (s *CheckinService) Checkin(ctx context.Context, userID string) (*model.Che
 	}
 
 	// 创建打卡记录
-	checkin := &model.CheckIn{
+	checkin := &usermodel.CheckIn{
 		UserID:         userID,
 		Date:           today,
 		ConsecutiveDay: consecutiveDay,
@@ -54,7 +54,7 @@ func (s *CheckinService) Checkin(ctx context.Context, userID string) (*model.Che
 	// 更新统计
 	stats, _ := s.checkinRepo.GetStats(ctx, userID)
 	if stats == nil {
-		stats = &model.CheckInStats{
+		stats = &usermodel.CheckInStats{
 			UserID: userID,
 		}
 	}
@@ -69,25 +69,25 @@ func (s *CheckinService) Checkin(ctx context.Context, userID string) (*model.Che
 		return nil, fmt.Errorf("failed to update stats: %w", err)
 	}
 
-	return &model.CheckInResponse{
+	return &usermodel.CheckInResponse{
 		Date:           checkin.Date,
 		ConsecutiveDay: checkin.ConsecutiveDay,
 	}, nil
 }
 
 // GetStats 获取打卡统计
-func (s *CheckinService) GetStats(ctx context.Context, userID string) (*model.CheckInStatsResponse, error) {
+func (s *CheckinService) GetStats(ctx context.Context, userID string) (*usermodel.CheckInStatsResponse, error) {
 	stats, err := s.checkinRepo.GetStats(ctx, userID)
 	if err != nil {
 		// 返回空统计
-		return &model.CheckInStatsResponse{
+		return &usermodel.CheckInStatsResponse{
 			TotalDays:      0,
 			ConsecutiveDay: 0,
 			MaxConsecutive: 0,
 		}, nil
 	}
 
-	return &model.CheckInStatsResponse{
+	return &usermodel.CheckInStatsResponse{
 		TotalDays:      stats.TotalDays,
 		ConsecutiveDay: stats.ConsecutiveDay,
 		MaxConsecutive: stats.MaxConsecutive,
@@ -96,28 +96,28 @@ func (s *CheckinService) GetStats(ctx context.Context, userID string) (*model.Ch
 }
 
 // GetCheckinList 获取打卡记录列表
-func (s *CheckinService) GetCheckinList(ctx context.Context, userID string, page, pageSize int) (*model.CheckInListResponse, error) {
+func (s *CheckinService) GetCheckinList(ctx context.Context, userID string, page, pageSize int) (*usermodel.CheckInListResponse, error) {
 	checkins, total, err := s.checkinRepo.List(ctx, userID, page, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list checkins: %w", err)
 	}
 
-	var list []model.CheckInResponse
+	var list []usermodel.CheckInResponse
 	for _, c := range checkins {
-		list = append(list, model.CheckInResponse{
+		list = append(list, usermodel.CheckInResponse{
 			Date:           c.Date,
 			ConsecutiveDay: c.ConsecutiveDay,
 		})
 	}
 
-	return &model.CheckInListResponse{
+	return &usermodel.CheckInListResponse{
 		Total: int(total),
 		List:  list,
 	}, nil
 }
 
 // GetCalendar 获取打卡日历
-func (s *CheckinService) GetCalendar(ctx context.Context, userID string, year, month int) (*model.CheckInCalendarResponse, error) {
+func (s *CheckinService) GetCalendar(ctx context.Context, userID string, year, month int) (*usermodel.CheckInCalendarResponse, error) {
 	days, err := s.checkinRepo.GetCheckInDates(ctx, userID, year, month)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get calendar: %w", err)
@@ -134,15 +134,15 @@ func (s *CheckinService) GetCalendar(ctx context.Context, userID string, year, m
 	lastDay := firstDay.AddDate(0, 1, -1)
 	daysInMonth := lastDay.Day()
 
-	calendarDays := make([]model.CalendarDay, 0, daysInMonth)
+	calendarDays := make([]usermodel.CalendarDay, 0, daysInMonth)
 	for i := 1; i <= daysInMonth; i++ {
-		calendarDays = append(calendarDays, model.CalendarDay{
+		calendarDays = append(calendarDays, usermodel.CalendarDay{
 			Day:       i,
 			IsChecked: checkinDays[i],
 		})
 	}
 
-	return &model.CheckInCalendarResponse{
+	return &usermodel.CheckInCalendarResponse{
 		Year:  year,
 		Month: month,
 		Days:  calendarDays,
@@ -150,7 +150,7 @@ func (s *CheckinService) GetCalendar(ctx context.Context, userID string, year, m
 }
 
 // GetRanking 获取排行榜
-func (s *CheckinService) GetRanking(ctx context.Context, userID string) (*model.RankingResponse, error) {
+func (s *CheckinService) GetRanking(ctx context.Context, userID string) (*usermodel.RankingResponse, error) {
 	items, err := s.checkinRepo.GetRanking(ctx, 100)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ranking: %w", err)
@@ -175,7 +175,7 @@ func (s *CheckinService) GetRanking(ctx context.Context, userID string) (*model.
 		myRank = len(items) + 1
 	}
 
-	return &model.RankingResponse{
+	return &usermodel.RankingResponse{
 		Total:            len(items),
 		MyRank:           myRank,
 		MyConsecutiveDay: myConsecutiveDay,

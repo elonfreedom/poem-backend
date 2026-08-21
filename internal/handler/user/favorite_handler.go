@@ -6,7 +6,7 @@ import (
 	"github.com/go-fuego/fuego"
 
 	"poem-backend/internal/middleware"
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 )
 
@@ -19,7 +19,7 @@ func NewFavoriteHandler(favoriteService *userservice.FavoriteService) *FavoriteH
 }
 
 // AddFavorite 添加收藏
-func (h *FavoriteHandler) AddFavorite(c fuego.ContextWithBody[model.FavoriteRequest]) (map[string]string, error) {
+func (h *FavoriteHandler) AddFavorite(c fuego.ContextWithBody[usermodel.FavoriteRequest]) (map[string]string, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -57,7 +57,7 @@ func (h *FavoriteHandler) RemoveFavorite(c fuego.ContextNoBody) (map[string]stri
 }
 
 // ListFavorites 获取收藏列表
-func (h *FavoriteHandler) ListFavorites(c fuego.ContextNoBody) (*model.FavoriteListResponse, error) {
+func (h *FavoriteHandler) ListFavorites(c fuego.ContextNoBody) (*usermodel.FavoriteListResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}

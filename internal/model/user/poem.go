@@ -1,0 +1,39 @@
+package usermodel
+
+// PoemResponse 诗歌响应
+type PoemResponse struct {
+	ID           int64    `json:"id" description:"诗歌ID"`
+	Title        string   `json:"title" description:"诗歌标题"`
+	Author       string   `json:"author" description:"作者"`
+	Dynasty      string   `json:"dynasty" description:"朝代"`
+	Content      string   `json:"content" description:"原文内容"`
+	Translation  string   `json:"translation,omitempty" description:"现代译文"`
+	Appreciation string   `json:"appreciation,omitempty" description:"赏析"`
+	Category     string   `json:"category" description:"分类名称"`
+	Tags         []string `json:"tags" description:"标签列表"`
+	CoverURL     string   `json:"cover_url,omitempty" description:"封面图片URL"`
+	IsFavorited  bool     `json:"is_favorited" description:"是否已收藏"`
+}
+
+// PoemListItem 诗歌列表项
+type PoemListItem struct {
+	ID       int64  `json:"id" description:"诗歌ID"`
+	Title    string `json:"title" description:"诗歌标题"`
+	Author   string `json:"author" description:"作者"`
+	Dynasty  string `json:"dynasty" description:"朝代"`
+	Category string `json:"category" description:"分类名称"`
+	CoverURL string `json:"cover_url" description:"封面图片URL"`
+}
+
+// PoemListResponse 诗歌列表响应
+type PoemListResponse struct {
+	Total int            `json:"total" description:"总数"`
+	List  []PoemListItem `json:"list" description:"诗歌列表"`
+}
+
+// SearchRequest 搜索请求
+type SearchRequest struct {
+	Keyword  string `json:"keyword" validate:"required,min=1" description:"搜索关键词"`
+	Page     int    `json:"page" validate:"min=1" description:"页码"`
+	PageSize int    `json:"page_size" validate:"min=1,max=50" description:"每页数量"`
+}

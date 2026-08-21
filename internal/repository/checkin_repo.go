@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 )
 
 type CheckinRepository struct {
@@ -18,7 +18,7 @@ func NewCheckinRepository(db *pgxpool.Pool) *CheckinRepository {
 }
 
 // Create 创建打卡记录
-func (r *CheckinRepository) Create(ctx context.Context, checkin *model.CheckIn) error {
+func (r *CheckinRepository) Create(ctx context.Context, checkin *usermodel.CheckIn) error {
 	query := `
 		INSERT INTO checkins (user_id, date, consecutive_day, created_at)
 		VALUES ($1, $2, $3, $4)
@@ -29,10 +29,10 @@ func (r *CheckinRepository) Create(ctx context.Context, checkin *model.CheckIn) 
 }
 
 // GetByDate 获取指定日期的打卡记录
-func (r *CheckinRepository) GetByDate(ctx context.Context, userID string, date time.Time) (*model.CheckIn, error) {
+func (r *CheckinRepository) GetByDate(ctx context.Context, userID string, date time.Time) (*usermodel.CheckIn, error) {
 	query := `SELECT user_id, date, consecutive_day, created_at FROM checkins WHERE user_id = $1 AND date = $2`
 	row := r.db.QueryRow(ctx, query, userID, date)
-	var c model.CheckIn
+	var c usermodel.CheckIn
 	err := row.Scan(&c.UserID, &c.Date, &c.ConsecutiveDay, &c.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -41,14 +41,14 @@ func (r *CheckinRepository) GetByDate(ctx context.Context, userID string, date t
 }
 
 // GetLastCheckIn 获取最近一次打卡记录
-func (r *CheckinRepository) GetLastCheckIn(ctx context.Context, userID string) (*model.CheckIn, error) {
+func (r *CheckinRepository) GetLastCheckIn(ctx context.Context, userID string) (*usermodel.CheckIn, error) {
 	query := `
 		SELECT user_id, date, consecutive_day, created_at
 		FROM checkins WHERE user_id = $1
 		ORDER BY date DESC LIMIT 1
 	`
 	row := r.db.QueryRow(ctx, query, userID)
-	var c model.CheckIn
+	var c usermodel.CheckIn
 	err := row.Scan(&c.UserID, &c.Date, &c.ConsecutiveDay, &c.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func (r *CheckinRepository) GetLastCheckIn(ctx context.Context, userID string) (
 }
 
 // List 获取打卡记录列表
-func (r *CheckinRepository) List(ctx context.Context, userID string, page, pageSize int) ([]model.CheckIn, int64, error) {
+func (r *CheckinRepository) List(ctx context.Context, userID string, page, pageSize int) ([]usermodel.CheckIn, int64, error) {
 	// 获取总数
 	countQuery := `SELECT COUNT(*) FROM checkins WHERE user_id = $1`
 	var total int64
@@ -79,9 +79,9 @@ func (r *CheckinRepository) List(ctx context.Context, userID string, page, pageS
 	}
 	defer rows.Close()
 
-	var checkins []model.CheckIn
+	var checkins []usermodel.CheckIn
 	for rows.Next() {
-		var c model.CheckIn
+		var c usermodel.CheckIn
 		err := rows.Scan(&c.UserID, &c.Date, &c.ConsecutiveDay, &c.CreatedAt)
 		if err != nil {
 			return nil, 0, err
@@ -92,13 +92,13 @@ func (r *CheckinRepository) List(ctx context.Context, userID string, page, pageS
 }
 
 // GetStats 获取打卡统计
-func (r *CheckinRepository) GetStats(ctx context.Context, userID string) (*model.CheckInStats, error) {
+func (r *CheckinRepository) GetStats(ctx context.Context, userID string) (*usermodel.CheckInStats, error) {
 	query := `
 		SELECT user_id, total_days, consecutive_day, max_consecutive, last_check_in
 		FROM checkin_stats WHERE user_id = $1
 	`
 	row := r.db.QueryRow(ctx, query, userID)
-	var s model.CheckInStats
+	var s usermodel.CheckInStats
 	err := row.Scan(&s.UserID, &s.TotalDays, &s.ConsecutiveDay, &s.MaxConsecutive, &s.LastCheckIn)
 	if err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func (r *CheckinRepository) GetStats(ctx context.Context, userID string) (*model
 }
 
 // UpsertStats 更新或插入打卡统计
-func (r *CheckinRepository) UpsertStats(ctx context.Context, stats *model.CheckInStats) error {
+func (r *CheckinRepository) UpsertStats(ctx context.Context, stats *usermodel.CheckInStats) error {
 	query := `
 		INSERT INTO checkin_stats (user_id, total_days, consecutive_day, max_consecutive, last_check_in)
 		VALUES ($1, $2, $3, $4, $5)
@@ -152,7 +152,7 @@ func (r *CheckinRepository) GetCheckInDates(ctx context.Context, userID string, 
 }
 
 // GetRanking 获取排行榜
-func (r *CheckinRepository) GetRanking(ctx context.Context, limit int) ([]model.RankingItem, error) {
+func (r *CheckinRepository) GetRanking(ctx context.Context, limit int) ([]usermodel.RankingItem, error) {
 	query := `
 		SELECT u.nickname, cs.consecutive_day
 		FROM checkin_stats cs
@@ -166,10 +166,10 @@ func (r *CheckinRepository) GetRanking(ctx context.Context, limit int) ([]model.
 	}
 	defer rows.Close()
 
-	var items []model.RankingItem
+	var items []usermodel.RankingItem
 	rank := 1
 	for rows.Next() {
-		var item model.RankingItem
+		var item usermodel.RankingItem
 		err := rows.Scan(&item.Nickname, &item.ConsecutiveDay)
 		if err != nil {
 			return nil, err

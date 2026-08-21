@@ -3,7 +3,7 @@ package user
 import (
 	"github.com/go-fuego/fuego"
 
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 )
 
@@ -54,11 +54,11 @@ type FinishRegistrationRequest struct {
 }
 
 // FinishRegistration 完成注册
-func (h *AuthHandler) FinishRegistration(c fuego.ContextWithBody[FinishRegistrationRequest]) (*model.LoginResponse, error) {
+func (h *AuthHandler) FinishRegistration(c fuego.ContextWithBody[FinishRegistrationRequest]) (*usermodel.LoginResponse, error) {
 	// 实际应用中需要完整解析 WebAuthn 响应
-	return &model.LoginResponse{
+	return &usermodel.LoginResponse{
 		Token: "jwt-token-placeholder",
-		User: model.UserResponse{
+		User: usermodel.UserResponse{
 			ID:       "user-id",
 			Nickname: "诗友",
 		},
@@ -91,11 +91,11 @@ type FinishLoginRequest struct {
 }
 
 // FinishLogin 完成登录
-func (h *AuthHandler) FinishLogin(c fuego.ContextWithBody[FinishLoginRequest]) (*model.LoginResponse, error) {
+func (h *AuthHandler) FinishLogin(c fuego.ContextWithBody[FinishLoginRequest]) (*usermodel.LoginResponse, error) {
 	// 实际应用中需要完整解析 WebAuthn 响应
-	return &model.LoginResponse{
+	return &usermodel.LoginResponse{
 		Token: "jwt-token-placeholder",
-		User: model.UserResponse{
+		User: usermodel.UserResponse{
 			ID:       "user-id",
 			Nickname: "诗友",
 		},

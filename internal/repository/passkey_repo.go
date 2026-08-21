@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 )
 
 type PasskeyRepository struct {
@@ -18,7 +18,7 @@ func NewPasskeyRepository(db *pgxpool.Pool) *PasskeyRepository {
 }
 
 // Create 创建 Passkey
-func (r *PasskeyRepository) Create(ctx context.Context, passkey *model.Passkey) error {
+func (r *PasskeyRepository) Create(ctx context.Context, passkey *usermodel.Passkey) error {
 	query := `
 		INSERT INTO passkeys (user_id, credential_id, public_key, sign_count, device_name, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -31,13 +31,13 @@ func (r *PasskeyRepository) Create(ctx context.Context, passkey *model.Passkey) 
 }
 
 // GetByCredentialID 根据凭证 ID 获取 Passkey
-func (r *PasskeyRepository) GetByCredentialID(ctx context.Context, credentialID []byte) (*model.Passkey, error) {
+func (r *PasskeyRepository) GetByCredentialID(ctx context.Context, credentialID []byte) (*usermodel.Passkey, error) {
 	query := `
 		SELECT id, user_id, credential_id, public_key, sign_count, device_name, created_at, last_used_at
 		FROM passkeys WHERE credential_id = $1
 	`
 	row := r.db.QueryRow(ctx, query, credentialID)
-	var p model.Passkey
+	var p usermodel.Passkey
 	var lastUsedAt *time.Time
 	err := row.Scan(&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey,
 		&p.SignCount, &p.DeviceName, &p.CreatedAt, lastUsedAt)
@@ -48,7 +48,7 @@ func (r *PasskeyRepository) GetByCredentialID(ctx context.Context, credentialID 
 }
 
 // GetByUserID 获取用户的所有 Passkey
-func (r *PasskeyRepository) GetByUserID(ctx context.Context, userID string) ([]model.Passkey, error) {
+func (r *PasskeyRepository) GetByUserID(ctx context.Context, userID string) ([]usermodel.Passkey, error) {
 	query := `
 		SELECT id, user_id, credential_id, public_key, sign_count, device_name, created_at, last_used_at
 		FROM passkeys WHERE user_id = $1 ORDER BY created_at
@@ -59,9 +59,9 @@ func (r *PasskeyRepository) GetByUserID(ctx context.Context, userID string) ([]m
 	}
 	defer rows.Close()
 
-	var passkeys []model.Passkey
+	var passkeys []usermodel.Passkey
 	for rows.Next() {
-		var p model.Passkey
+		var p usermodel.Passkey
 		err := rows.Scan(&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey,
 			&p.SignCount, &p.DeviceName, &p.CreatedAt, &p.LastUsedAt)
 		if err != nil {

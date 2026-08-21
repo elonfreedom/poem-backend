@@ -1,10 +1,8 @@
-package model
+package usermodel
 
-import (
-	"time"
-)
+import "time"
 
-// Favorite 收藏模型（复合主键：user_id + poem_id）
+// Favorite 收藏模型
 type Favorite struct {
 	UserID    string    `json:"user_id" db:"user_id" description:"用户ID (UUID v7)"`
 	PoemID    int64     `json:"poem_id" db:"poem_id" description:"诗歌ID"`

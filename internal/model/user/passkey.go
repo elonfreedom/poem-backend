@@ -1,10 +1,6 @@
-package model
+package usermodel
 
-import (
-	"time"
-
-	"github.com/go-webauthn/webauthn/webauthn"
-)
+import "time"
 
 // Passkey 通行密钥模型
 type Passkey struct {
@@ -34,26 +30,4 @@ func (p *Passkey) ToResponse() PasskeyResponse {
 		CreatedAt:  p.CreatedAt,
 		LastUsedAt: p.LastUsedAt,
 	}
-}
-
-// WebAuthnUser 实现 go-webauthn 的 User 接口
-func (u *User) WebAuthnID() []byte {
-	return []byte(u.ID)
-}
-
-func (u *User) WebAuthnName() string {
-	return u.Nickname
-}
-
-func (u *User) WebAuthnDisplayName() string {
-	return u.Nickname
-}
-
-func (u *User) WebAuthnIcon() string {
-	return ""
-}
-
-func (u *User) WebAuthnCredentials() []webauthn.Credential {
-	// 由 service 层填充
-	return nil
 }

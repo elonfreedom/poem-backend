@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 )
 
 type ReadingPlanRepository struct {
@@ -18,7 +18,7 @@ func NewReadingPlanRepository(db *pgxpool.Pool) *ReadingPlanRepository {
 }
 
 // Create 创建阅读计划
-func (r *ReadingPlanRepository) Create(ctx context.Context, plan *model.ReadingPlan) error {
+func (r *ReadingPlanRepository) Create(ctx context.Context, plan *usermodel.ReadingPlan) error {
 	// 获取用户当前最大 plan_id
 	var maxPlanID int
 	err := r.db.QueryRow(ctx, `SELECT COALESCE(MAX(plan_id), 0) FROM reading_plans WHERE user_id = $1`, plan.UserID).Scan(&maxPlanID)
@@ -38,13 +38,13 @@ func (r *ReadingPlanRepository) Create(ctx context.Context, plan *model.ReadingP
 }
 
 // GetByID 根据 user_id 和 plan_id 获取计划
-func (r *ReadingPlanRepository) GetByID(ctx context.Context, userID string, planID int) (*model.ReadingPlan, error) {
+func (r *ReadingPlanRepository) GetByID(ctx context.Context, userID string, planID int) (*usermodel.ReadingPlan, error) {
 	query := `
 		SELECT user_id, plan_id, daily_count, start_date, end_date, status, created_at, updated_at
 		FROM reading_plans WHERE user_id = $1 AND plan_id = $2
 	`
 	row := r.db.QueryRow(ctx, query, userID, planID)
-	var plan model.ReadingPlan
+	var plan usermodel.ReadingPlan
 	err := row.Scan(&plan.UserID, &plan.PlanID, &plan.DailyCount, &plan.StartDate,
 		&plan.EndDate, &plan.Status, &plan.CreatedAt, &plan.UpdatedAt)
 	if err != nil {
@@ -54,14 +54,14 @@ func (r *ReadingPlanRepository) GetByID(ctx context.Context, userID string, plan
 }
 
 // GetActiveByUserID 获取用户当前进行中的计划
-func (r *ReadingPlanRepository) GetActiveByUserID(ctx context.Context, userID string) (*model.ReadingPlan, error) {
+func (r *ReadingPlanRepository) GetActiveByUserID(ctx context.Context, userID string) (*usermodel.ReadingPlan, error) {
 	query := `
 		SELECT user_id, plan_id, daily_count, start_date, end_date, status, created_at, updated_at
 		FROM reading_plans WHERE user_id = $1 AND status = 'active'
 		ORDER BY created_at DESC LIMIT 1
 	`
 	row := r.db.QueryRow(ctx, query, userID)
-	var plan model.ReadingPlan
+	var plan usermodel.ReadingPlan
 	err := row.Scan(&plan.UserID, &plan.PlanID, &plan.DailyCount, &plan.StartDate,
 		&plan.EndDate, &plan.Status, &plan.CreatedAt, &plan.UpdatedAt)
 	if err != nil {
@@ -78,13 +78,13 @@ func (r *ReadingPlanRepository) UpdateStatus(ctx context.Context, userID string,
 }
 
 // GetProgress 获取阅读进度
-func (r *ReadingPlanRepository) GetProgress(ctx context.Context, userID string, date time.Time) (*model.ReadingProgress, error) {
+func (r *ReadingPlanRepository) GetProgress(ctx context.Context, userID string, date time.Time) (*usermodel.ReadingProgress, error) {
 	query := `
 		SELECT user_id, date, read_count, poem_ids, created_at
 		FROM reading_progress WHERE user_id = $1 AND date = $2
 	`
 	row := r.db.QueryRow(ctx, query, userID, date)
-	var p model.ReadingProgress
+	var p usermodel.ReadingProgress
 	err := row.Scan(&p.UserID, &p.Date, &p.ReadCount, &p.PoemIDs, &p.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (r *ReadingPlanRepository) GetProgress(ctx context.Context, userID string, 
 }
 
 // UpsertProgress 更新或插入阅读进度
-func (r *ReadingPlanRepository) UpsertProgress(ctx context.Context, progress *model.ReadingProgress) error {
+func (r *ReadingPlanRepository) UpsertProgress(ctx context.Context, progress *usermodel.ReadingProgress) error {
 	query := `
 		INSERT INTO reading_progress (user_id, date, read_count, poem_ids, created_at)
 		VALUES ($1, $2, $3, $4, $5)
@@ -107,7 +107,7 @@ func (r *ReadingPlanRepository) UpsertProgress(ctx context.Context, progress *mo
 }
 
 // GetProgressByDateRange 获取日期范围内的进度
-func (r *ReadingPlanRepository) GetProgressByDateRange(ctx context.Context, userID string, startDate, endDate time.Time) ([]model.ReadingProgress, error) {
+func (r *ReadingPlanRepository) GetProgressByDateRange(ctx context.Context, userID string, startDate, endDate time.Time) ([]usermodel.ReadingProgress, error) {
 	query := `
 		SELECT user_id, date, read_count, poem_ids, created_at
 		FROM reading_progress
@@ -120,9 +120,9 @@ func (r *ReadingPlanRepository) GetProgressByDateRange(ctx context.Context, user
 	}
 	defer rows.Close()
 
-	var progressList []model.ReadingProgress
+	var progressList []usermodel.ReadingProgress
 	for rows.Next() {
-		var p model.ReadingProgress
+		var p usermodel.ReadingProgress
 		err := rows.Scan(&p.UserID, &p.Date, &p.ReadCount, &p.PoemIDs, &p.CreatedAt)
 		if err != nil {
 			return nil, err

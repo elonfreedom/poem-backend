@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -160,6 +161,92 @@ func (r *PoemRepository) GetDailyRecommendation(ctx context.Context) (*model.Poe
 		return nil, err
 	}
 	return &p, nil
+}
+
+// ListAll 获取诗歌列表（admin 用，不过滤 status）
+func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword string) ([]model.Poem, int64, error) {
+	where := "WHERE 1=1"
+	args := []interface{}{}
+	argIdx := 1
+
+	if categoryID != nil {
+		where += fmt.Sprintf(" AND category_id = $%d", argIdx)
+		args = append(args, *categoryID)
+		argIdx++
+	}
+	if status != "" {
+		where += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, status)
+		argIdx++
+	}
+	if keyword != "" {
+		where += fmt.Sprintf(" AND (title ILIKE $%d OR author ILIKE $%d)", argIdx, argIdx+1)
+		likePattern := "%" + keyword + "%"
+		args = append(args, likePattern, likePattern)
+		argIdx += 2
+	}
+
+	countQuery := "SELECT COUNT(*) FROM poems " + where
+	var total int64
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, title, author, dynasty, content, translation, appreciation, category_id, tags, cover_url, status, created_by, created_at, updated_at
+		FROM poems %s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, where, argIdx, argIdx+1)
+	args = append(args, pageSize, (page-1)*pageSize)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var poems []model.Poem
+	for rows.Next() {
+		var p model.Poem
+		err := rows.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
+			&p.Translation, &p.Appreciation, &p.CategoryID, &p.Tags, &p.CoverURL,
+			&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			return nil, 0, err
+		}
+		poems = append(poems, p)
+	}
+	return poems, total, rows.Err()
+}
+
+// Update 更新诗歌
+func (r *PoemRepository) Update(ctx context.Context, poem *model.Poem) error {
+	query := `
+		UPDATE poems SET title = $1, author = $2, dynasty = $3, content = $4,
+			translation = $5, appreciation = $6, category_id = $7, tags = $8,
+			cover_url = $9, status = $10, updated_at = $11
+		WHERE id = $12
+	`
+	_, err := r.db.Exec(ctx, query,
+		poem.Title, poem.Author, poem.Dynasty, poem.Content,
+		poem.Translation, poem.Appreciation, poem.CategoryID, poem.Tags,
+		poem.CoverURL, poem.Status, poem.UpdatedAt, poem.ID,
+	)
+	return err
+}
+
+// Delete 删除诗歌
+func (r *PoemRepository) Delete(ctx context.Context, id int64) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM poems WHERE id = $1", id)
+	return err
+}
+
+// UpdateStatus 更新诗歌状态
+func (r *PoemRepository) UpdateStatus(ctx context.Context, id int64, status string) error {
+	_, err := r.db.Exec(ctx, "UPDATE poems SET status = $1, updated_at = NOW() WHERE id = $2", status, id)
+	return err
 }
 
 // RecordView 记录浏览

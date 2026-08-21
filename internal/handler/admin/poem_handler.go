@@ -1,25 +1,175 @@
 package admin
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-fuego/fuego"
 
-	"poem-backend/internal/model"
-	"poem-backend/internal/repository"
+	"poem-backend/internal/middleware"
+	adminmodel "poem-backend/internal/model/admin"
+	"poem-backend/internal/service/admin"
+	"poem-backend/pkg/response"
 )
 
 type PoemHandler struct {
-	poemRepo *repository.PoemRepository
+	poemService *admin.AdminPoemService
 }
 
-func NewPoemHandler(poemRepo *repository.PoemRepository) *PoemHandler {
-	return &PoemHandler{poemRepo: poemRepo}
+func NewPoemHandler(poemService *admin.AdminPoemService) *PoemHandler {
+	return &PoemHandler{poemService: poemService}
+}
+
+// ImportPoems 导入诗歌（JSON 文件）
+func (h *PoemHandler) ImportPoems(c fuego.ContextNoBody) (*response.APIResponse[ImportResponse], error) {
+	file, header, err := c.Request().FormFile("file")
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid file", Detail: "请选择要上传的 JSON 文件"}
+	}
+	defer file.Close()
+
+	if !strings.HasSuffix(header.Filename, ".json") {
+		return nil, fuego.BadRequestError{Title: "invalid file type", Detail: "仅支持 JSON 文件"}
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "read error", Detail: "读取文件失败"}
+	}
+
+	var poems []adminmodel.AdminPoemCreateRequest
+	if err := json.Unmarshal(data, &poems); err != nil {
+		var rawPoems []map[string]any
+		if err := json.Unmarshal(data, &rawPoems); err != nil {
+			return nil, fuego.BadRequestError{Title: "invalid json", Detail: "JSON 格式错误"}
+		}
+		poems = convertRawPoems(rawPoems)
+	}
+
+	result := ImportResponse{Total: len(poems)}
+	userID := middleware.GetUserIDFromContext(c.Context())
+
+	for i, req := range poems {
+		if req.Title == "" || req.Author == "" || req.Content == "" {
+			result.Failed++
+			result.Errors = append(result.Errors, "第"+strconv.Itoa(i+1)+"条：标题、作者、内容为必填项")
+			continue
+		}
+		if _, err := h.poemService.Create(c.Context(), &req, &userID); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, "第"+strconv.Itoa(i+1)+"条："+err.Error())
+			continue
+		}
+		result.Success++
+	}
+
+	return response.OK(result), nil
+}
+
+// List 获取诗歌列表
+func (h *PoemHandler) List(c fuego.ContextNoBody) (*response.APIResponse[response.PageData[adminmodel.AdminPoemResponse]], error) {
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	pageSize, _ := strconv.Atoi(c.QueryParam("page_size"))
+	status := c.QueryParam("status")
+	keyword := c.QueryParam("keyword")
+
+	var categoryID *int64
+	if cid, err := strconv.ParseInt(c.QueryParam("category_id"), 10, 64); err == nil {
+		categoryID = &cid
+	}
+
+	result, err := h.poemService.List(c.Context(), page, pageSize, categoryID, status, keyword)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "list failed", Detail: err.Error()}
+	}
+
+	return response.PageOK(result.Items, result.Total), nil
+}
+
+// Create 创建诗歌
+func (h *PoemHandler) Create(c fuego.ContextWithBody[adminmodel.AdminPoemCreateRequest]) (*response.APIResponse[adminmodel.AdminPoemResponse], error) {
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	userID := middleware.GetUserIDFromContext(c.Context())
+	result, err := h.poemService.Create(c.Context(), &body, &userID)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "create failed", Detail: err.Error()}
+	}
+
+	return response.OK(*result), nil
+}
+
+// GetByID 获取诗歌详情
+func (h *PoemHandler) GetByID(c fuego.ContextNoBody) (*response.APIResponse[adminmodel.AdminPoemResponse], error) {
+	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "诗歌ID必须是数字"}
+	}
+
+	result, err := h.poemService.GetByID(c.Context(), id)
+	if err != nil {
+		return nil, fuego.NotFoundError{Title: "not found", Detail: err.Error()}
+	}
+
+	return response.OK(*result), nil
+}
+
+// Update 更新诗歌
+func (h *PoemHandler) Update(c fuego.ContextWithBody[adminmodel.AdminPoemUpdateRequest]) (*response.APIResponse[any], error) {
+	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "诗歌ID必须是数字"}
+	}
+
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	if err := h.poemService.Update(c.Context(), id, &body); err != nil {
+		return nil, fuego.InternalServerError{Title: "update failed", Detail: err.Error()}
+	}
+
+	return response.OK[any](nil), nil
+}
+
+// Delete 删除诗歌
+func (h *PoemHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "诗歌ID必须是数字"}
+	}
+
+	if err := h.poemService.Delete(c.Context(), id); err != nil {
+		return nil, fuego.InternalServerError{Title: "delete failed", Detail: err.Error()}
+	}
+
+	return response.OK[any](nil), nil
+}
+
+// UpdateStatus 更新诗歌状态
+func (h *PoemHandler) UpdateStatus(c fuego.ContextWithBody[adminmodel.AdminPoemUpdateStatusRequest]) (*response.APIResponse[any], error) {
+	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "诗歌ID必须是数字"}
+	}
+
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	if err := h.poemService.UpdateStatus(c.Context(), id, body.Status); err != nil {
+		return nil, fuego.InternalServerError{Title: "update status failed", Detail: err.Error()}
+	}
+
+	return response.OK[any](nil), nil
 }
 
 // ImportResponse 导入响应
@@ -30,150 +180,36 @@ type ImportResponse struct {
 	Errors  []string `json:"errors" description:"错误详情"`
 }
 
-// ImportPoems 导入诗歌（JSON 文件）
-func (h *PoemHandler) ImportPoems(c fuego.ContextNoBody) (*ImportResponse, error) {
-	// 获取上传的文件
-	file, header, err := c.Request().FormFile("file")
-	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid file", Detail: "请选择要上传的 JSON 文件"}
-	}
-	defer file.Close()
-
-	// 检查文件类型
-	if !strings.HasSuffix(header.Filename, ".json") {
-		return nil, fuego.BadRequestError{Title: "invalid file type", Detail: "仅支持 JSON 文件"}
-	}
-
-	// 限制文件大小（10MB）
-	if header.Size > 10*1024*1024 {
-		return nil, fuego.BadRequestError{Title: "file too large", Detail: "文件大小不能超过 10MB"}
-	}
-
-	// 读取文件内容
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fuego.InternalServerError{Title: "read error", Detail: "读取文件失败"}
-	}
-
-	// 解析 JSON
-	var poems []model.Poem
-	if err := json.Unmarshal(data, &poems); err != nil {
-		// 尝试解析为原始格式（唐诗/宋词）
-		var rawPoems []map[string]any
-		if err := json.Unmarshal(data, &rawPoems); err != nil {
-			return nil, fuego.BadRequestError{Title: "invalid json", Detail: "JSON 格式错误，请检查文件格式"}
-		}
-		// 转换原始格式
-		poems = convertRawPoems(rawPoems)
-	}
-
-	// 获取朝代参数
-	dynasty := c.QueryParam("dynasty")
-
-	// 批量导入
-	result := ImportResponse{
-		Total:  len(poems),
-		Errors: []string{},
-	}
-
-	now := time.Now()
-	for i, p := range poems {
-		// 设置默认值
-		if p.Status == "" {
-			p.Status = "published"
-		}
-		if p.Dynasty == "" && dynasty != "" {
-			p.Dynasty = dynasty
-		}
-		p.CreatedAt = now
-		p.UpdatedAt = now
-
-		// 验证必填字段
-		if p.Title == "" || p.Author == "" || p.Content == "" {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("第 %d 条：标题、作者、内容为必填项", i+1))
-			continue
-		}
-
-		// 插入数据库
-		if err := h.poemRepo.Create(context.Background(), &p); err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("第 %d 条：%v", i+1, err))
-			continue
-		}
-		result.Success++
-	}
-
-	return &result, nil
-}
-
-// convertRawPoems 转换原始 JSON 格式为 Poem 模型
-func convertRawPoems(rawPoems []map[string]any) []model.Poem {
-	poems := make([]model.Poem, 0, len(rawPoems))
+// convertRawPoems 转换原始 JSON 格式为 AdminPoemCreateRequest
+func convertRawPoems(rawPoems []map[string]any) []adminmodel.AdminPoemCreateRequest {
+	poems := make([]adminmodel.AdminPoemCreateRequest, 0, len(rawPoems))
 	for _, raw := range rawPoems {
-		poem := model.Poem{}
-
-		// 标题
+		req := adminmodel.AdminPoemCreateRequest{}
 		if title, ok := raw["title"].(string); ok {
-			poem.Title = title
+			req.Title = title
 		}
-		// 宋词用 rhythmic 作为标题
-		if rhythmic, ok := raw["rhythmic"].(string); ok && poem.Title == "" {
-			poem.Title = rhythmic
+		if rhythmic, ok := raw["rhythmic"].(string); ok && req.Title == "" {
+			req.Title = rhythmic
 		}
-
-		// 作者
 		if author, ok := raw["author"].(string); ok {
-			poem.Author = author
+			req.Author = author
 		}
-
-		// 内容（paragraphs 数组）
 		if paragraphs, ok := raw["paragraphs"].([]any); ok {
-			content := make([]string, 0, len(paragraphs))
+			var content []string
 			for _, p := range paragraphs {
 				if s, ok := p.(string); ok {
 					content = append(content, s)
 				}
 			}
-			poem.Content = strings.Join(content, "\n")
+			req.Content = strings.Join(content, "\n")
 		}
-
-		// 标签（宋词 rhythmic）
 		if rhythmic, ok := raw["rhythmic"].(string); ok {
-			poem.Tags = []string{rhythmic}
+			req.Tags = []string{rhythmic}
 		}
-
-		poems = append(poems, poem)
+		poems = append(poems, req)
 	}
 	return poems
 }
 
-// List 获取诗歌列表
-func (h *PoemHandler) List(c fuego.ContextNoBody) (any, error) {
-	return nil, fuego.InternalServerError{Title: "not implemented", Detail: "接口开发中"}
-}
-
-// Create 创建诗歌
-func (h *PoemHandler) Create(c fuego.ContextNoBody) (any, error) {
-	return nil, fuego.InternalServerError{Title: "not implemented", Detail: "接口开发中"}
-}
-
-// GetByID 获取诗歌详情
-func (h *PoemHandler) GetByID(c fuego.ContextNoBody) (any, error) {
-	return nil, fuego.InternalServerError{Title: "not implemented", Detail: "接口开发中"}
-}
-
-// Update 更新诗歌
-func (h *PoemHandler) Update(c fuego.ContextNoBody) (any, error) {
-	return nil, fuego.InternalServerError{Title: "not implemented", Detail: "接口开发中"}
-}
-
-// Delete 删除诗歌
-func (h *PoemHandler) Delete(c fuego.ContextNoBody) (any, error) {
-	return nil, fuego.InternalServerError{Title: "not implemented", Detail: "接口开发中"}
-}
-
-// UpdateStatus 更新状态
-func (h *PoemHandler) UpdateStatus(c fuego.ContextNoBody) (any, error) {
-	return nil, fuego.InternalServerError{Title: "not implemented", Detail: "接口开发中"}
-}
+// 避免 fmt 未使用
+var _ = fmt.Sprintf

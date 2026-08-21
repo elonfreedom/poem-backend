@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -18,7 +18,7 @@ func NewReadingPlanService(readingPlanRepo *repository.ReadingPlanRepository) *R
 }
 
 // CreatePlan 创建阅读计划
-func (s *ReadingPlanService) CreatePlan(ctx context.Context, userID string, req *model.CreatePlanRequest) (*model.CreatePlanResponse, error) {
+func (s *ReadingPlanService) CreatePlan(ctx context.Context, userID string, req *usermodel.CreatePlanRequest) (*usermodel.CreatePlanResponse, error) {
 	// 检查是否有进行中的计划
 	existing, _ := s.readingPlanRepo.GetActiveByUserID(ctx, userID)
 	if existing != nil {
@@ -28,7 +28,7 @@ func (s *ReadingPlanService) CreatePlan(ctx context.Context, userID string, req 
 	now := time.Now()
 	endDate := now.AddDate(0, 0, req.Duration-1)
 
-	plan := &model.ReadingPlan{
+	plan := &usermodel.ReadingPlan{
 		UserID:     userID,
 		DailyCount: req.DailyCount,
 		StartDate:  now,
@@ -42,7 +42,7 @@ func (s *ReadingPlanService) CreatePlan(ctx context.Context, userID string, req 
 		return nil, fmt.Errorf("failed to create plan: %w", err)
 	}
 
-	return &model.CreatePlanResponse{
+	return &usermodel.CreatePlanResponse{
 		PlanID:     plan.PlanID,
 		DailyCount: plan.DailyCount,
 		StartDate:  plan.StartDate,
@@ -52,7 +52,7 @@ func (s *ReadingPlanService) CreatePlan(ctx context.Context, userID string, req 
 }
 
 // GetCurrentPlan 获取当前计划
-func (s *ReadingPlanService) GetCurrentPlan(ctx context.Context, userID string) (*model.CurrentPlanResponse, error) {
+func (s *ReadingPlanService) GetCurrentPlan(ctx context.Context, userID string) (*usermodel.CurrentPlanResponse, error) {
 	plan, err := s.readingPlanRepo.GetActiveByUserID(ctx, userID)
 	if err != nil {
 		return nil, nil // 没有进行中的计划
@@ -82,8 +82,8 @@ func (s *ReadingPlanService) GetCurrentPlan(ctx context.Context, userID string) 
 		completionRate = float64(completedDays) / float64(totalDays) * 100
 	}
 
-	return &model.CurrentPlanResponse{
-		Plan: model.CreatePlanResponse{
+	return &usermodel.CurrentPlanResponse{
+		Plan: usermodel.CreatePlanResponse{
 			PlanID:     plan.PlanID,
 			DailyCount: plan.DailyCount,
 			StartDate:  plan.StartDate,
@@ -107,7 +107,7 @@ func (s *ReadingPlanService) ResumePlan(ctx context.Context, userID string, plan
 }
 
 // LogReading 记录阅读
-func (s *ReadingPlanService) LogReading(ctx context.Context, userID string, poemIDs []int64) (*model.LogReadingResponse, error) {
+func (s *ReadingPlanService) LogReading(ctx context.Context, userID string, poemIDs []int64) (*usermodel.LogReadingResponse, error) {
 	// 获取当前计划
 	plan, err := s.readingPlanRepo.GetActiveByUserID(ctx, userID)
 	if err != nil {
@@ -119,7 +119,7 @@ func (s *ReadingPlanService) LogReading(ctx context.Context, userID string, poem
 	// 获取或创建今日进度
 	progress, _ := s.readingPlanRepo.GetProgress(ctx, userID, today)
 	if progress == nil {
-		progress = &model.ReadingProgress{
+		progress = &usermodel.ReadingProgress{
 			UserID:  userID,
 			Date:    today,
 			CreatedAt: time.Now(),
@@ -147,7 +147,7 @@ func (s *ReadingPlanService) LogReading(ctx context.Context, userID string, poem
 		return nil, fmt.Errorf("failed to log reading: %w", err)
 	}
 
-	return &model.LogReadingResponse{
+	return &usermodel.LogReadingResponse{
 		TodayCount:    progress.ReadCount,
 		TargetCount:   plan.DailyCount,
 		IsTodayFinish: progress.ReadCount >= plan.DailyCount,
@@ -155,7 +155,7 @@ func (s *ReadingPlanService) LogReading(ctx context.Context, userID string, poem
 }
 
 // GetPlanProgress 获取计划进度
-func (s *ReadingPlanService) GetPlanProgress(ctx context.Context, userID string, planID int) (*model.PlanProgressResponse, error) {
+func (s *ReadingPlanService) GetPlanProgress(ctx context.Context, userID string, planID int) (*usermodel.PlanProgressResponse, error) {
 	plan, err := s.readingPlanRepo.GetByID(ctx, userID, planID)
 	if err != nil {
 		return nil, fmt.Errorf("plan not found: %w", err)
@@ -168,14 +168,14 @@ func (s *ReadingPlanService) GetPlanProgress(ctx context.Context, userID string,
 	}
 
 	// 构建每日进度
-	dailyProgress := make([]model.DailyProgress, 0, len(progressList))
+	dailyProgress := make([]usermodel.DailyProgress, 0, len(progressList))
 	completedDays := 0
 	for _, p := range progressList {
 		isReached := p.ReadCount >= plan.DailyCount
 		if isReached {
 			completedDays++
 		}
-		dailyProgress = append(dailyProgress, model.DailyProgress{
+		dailyProgress = append(dailyProgress, usermodel.DailyProgress{
 			Date:      p.Date,
 			ReadCount: p.ReadCount,
 			Target:    plan.DailyCount,
@@ -189,7 +189,7 @@ func (s *ReadingPlanService) GetPlanProgress(ctx context.Context, userID string,
 		completionRate = float64(completedDays) / float64(totalDays) * 100
 	}
 
-	return &model.PlanProgressResponse{
+	return &usermodel.PlanProgressResponse{
 		PlanID:         plan.PlanID,
 		DailyCount:     plan.DailyCount,
 		StartDate:      plan.StartDate,

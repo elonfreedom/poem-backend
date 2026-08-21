@@ -1,4 +1,4 @@
-package model
+package usermodel
 
 import (
 	"time"
@@ -33,6 +33,16 @@ type LoginResponse struct {
 	User  UserResponse `json:"user" description:"用户信息"`
 }
 
+// UpdateProfileRequest 更新个人信息请求
+type UpdateProfileRequest struct {
+	Nickname string `json:"nickname" validate:"omitempty,min=2,max=20" description:"用户昵称（2-20个字符）"`
+}
+
+// BindEmailRequest 绑定邮箱请求
+type BindEmailRequest struct {
+	Email string `json:"email" validate:"required,email" description:"邮箱地址"`
+}
+
 // ToResponse 转换为响应格式
 func (u *User) ToResponse() UserResponse {
 	resp := UserResponse{
@@ -62,12 +72,23 @@ func maskEmail(email string) string {
 	return email[:3] + "***" + email[at:]
 }
 
-// UpdateProfileRequest 更新个人信息请求
-type UpdateProfileRequest struct {
-	Nickname string `json:"nickname" validate:"omitempty,min=2,max=20" description:"用户昵称（2-20个字符）"`
+// WebAuthnUser 实现 go-webauthn 的 User 接口
+func (u *User) WebAuthnID() []byte {
+	return []byte(u.ID)
 }
 
-// BindEmailRequest 绑定邮箱请求
-type BindEmailRequest struct {
-	Email string `json:"email" validate:"required,email" description:"邮箱地址"`
+func (u *User) WebAuthnName() string {
+	return u.Nickname
+}
+
+func (u *User) WebAuthnDisplayName() string {
+	return u.Nickname
+}
+
+func (u *User) WebAuthnIcon() string {
+	return ""
+}
+
+func (u *User) WebAuthnCredentials() []webauthn.Credential {
+	return nil
 }

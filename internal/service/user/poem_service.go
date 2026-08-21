@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -17,15 +17,15 @@ func NewPoemService(poemRepo *repository.PoemRepository) *PoemService {
 }
 
 // List 获取诗歌列表
-func (s *PoemService) List(ctx context.Context, page, pageSize int, categoryID *int64) (*model.PoemListResponse, error) {
+func (s *PoemService) List(ctx context.Context, page, pageSize int, categoryID *int64) (*usermodel.PoemListResponse, error) {
 	poems, total, err := s.poemRepo.List(ctx, page, pageSize, categoryID, "published")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list poems: %w", err)
 	}
 
-	list := make([]model.PoemListItem, 0, len(poems))
+	list := make([]usermodel.PoemListItem, 0, len(poems))
 	for _, p := range poems {
-		list = append(list, model.PoemListItem{
+		list = append(list, usermodel.PoemListItem{
 			ID:    p.ID,
 			Title: p.Title,
 			Author: p.Author,
@@ -34,14 +34,14 @@ func (s *PoemService) List(ctx context.Context, page, pageSize int, categoryID *
 		})
 	}
 
-	return &model.PoemListResponse{
+	return &usermodel.PoemListResponse{
 		Total: int(total),
 		List:  list,
 	}, nil
 }
 
 // GetByID 获取诗歌详情
-func (s *PoemService) GetByID(ctx context.Context, poemID int64, userID *string) (*model.PoemResponse, error) {
+func (s *PoemService) GetByID(ctx context.Context, poemID int64, userID *string) (*usermodel.PoemResponse, error) {
 	poem, err := s.poemRepo.GetByID(ctx, poemID)
 	if err != nil {
 		return nil, fmt.Errorf("poem not found: %w", err)
@@ -56,7 +56,7 @@ func (s *PoemService) GetByID(ctx context.Context, poemID int64, userID *string)
 		isFavorited, _ = s.poemRepo.IsFavorited(ctx, *userID, poemID)
 	}
 
-	resp := model.PoemResponse{
+	resp := usermodel.PoemResponse{
 		ID:          poem.ID,
 		Title:       poem.Title,
 		Author:      poem.Author,
@@ -73,15 +73,15 @@ func (s *PoemService) GetByID(ctx context.Context, poemID int64, userID *string)
 }
 
 // Search 搜索诗歌
-func (s *PoemService) Search(ctx context.Context, keyword string, page, pageSize int) (*model.PoemListResponse, error) {
+func (s *PoemService) Search(ctx context.Context, keyword string, page, pageSize int) (*usermodel.PoemListResponse, error) {
 	poems, total, err := s.poemRepo.Search(ctx, keyword, page, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search poems: %w", err)
 	}
 
-	list := make([]model.PoemListItem, 0, len(poems))
+	list := make([]usermodel.PoemListItem, 0, len(poems))
 	for _, p := range poems {
-		list = append(list, model.PoemListItem{
+		list = append(list, usermodel.PoemListItem{
 			ID:    p.ID,
 			Title: p.Title,
 			Author: p.Author,
@@ -90,20 +90,20 @@ func (s *PoemService) Search(ctx context.Context, keyword string, page, pageSize
 		})
 	}
 
-	return &model.PoemListResponse{
+	return &usermodel.PoemListResponse{
 		Total: int(total),
 		List:  list,
 	}, nil
 }
 
 // GetDailyRecommendation 获取每日推荐
-func (s *PoemService) GetDailyRecommendation(ctx context.Context) (*model.PoemResponse, error) {
+func (s *PoemService) GetDailyRecommendation(ctx context.Context) (*usermodel.PoemResponse, error) {
 	poem, err := s.poemRepo.GetDailyRecommendation(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get daily recommendation: %w", err)
 	}
 
-	resp := model.PoemResponse{
+	resp := usermodel.PoemResponse{
 		ID:          poem.ID,
 		Title:       poem.Title,
 		Author:      poem.Author,

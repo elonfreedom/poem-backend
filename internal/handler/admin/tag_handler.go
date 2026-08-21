@@ -1,26 +1,55 @@
 package admin
 
 import (
+	"strconv"
+
 	"github.com/go-fuego/fuego"
+
+	adminmodel "poem-backend/internal/model/admin"
+	"poem-backend/internal/service/admin"
+	"poem-backend/pkg/response"
 )
 
-type TagHandler struct{}
+type TagHandler struct {
+	tagService *admin.AdminTagService
+}
 
-func NewTagHandler() *TagHandler {
-	return &TagHandler{}
+func NewTagHandler(tagService *admin.AdminTagService) *TagHandler {
+	return &TagHandler{tagService: tagService}
 }
 
 // List 获取标签列表
-func (h *TagHandler) List(c fuego.ContextNoBody) (any, error) {
-	return nil, fuego.InternalServerError{Title: "not implemented", Detail: "接口开发中"}
+func (h *TagHandler) List(c fuego.ContextNoBody) (*response.APIResponse[[]adminmodel.AdminTagResponse], error) {
+	result, err := h.tagService.List(c.Context())
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "list failed", Detail: err.Error()}
+	}
+	return response.OK(result), nil
 }
 
 // Create 创建标签
-func (h *TagHandler) Create(c fuego.ContextNoBody) (any, error) {
-	return nil, fuego.InternalServerError{Title: "not implemented", Detail: "接口开发中"}
+func (h *TagHandler) Create(c fuego.ContextWithBody[adminmodel.AdminTagCreateRequest]) (*response.APIResponse[adminmodel.AdminTagResponse], error) {
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	result, err := h.tagService.Create(c.Context(), &body)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "create failed", Detail: err.Error()}
+	}
+	return response.OK(*result), nil
 }
 
 // Delete 删除标签
-func (h *TagHandler) Delete(c fuego.ContextNoBody) (any, error) {
-	return nil, fuego.InternalServerError{Title: "not implemented", Detail: "接口开发中"}
+func (h *TagHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "标签ID必须是数字"}
+	}
+
+	if err := h.tagService.Delete(c.Context(), id); err != nil {
+		return nil, fuego.InternalServerError{Title: "delete failed", Detail: err.Error()}
+	}
+	return response.OK[any](nil), nil
 }

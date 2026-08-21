@@ -1,10 +1,8 @@
-package model
+package usermodel
 
-import (
-	"time"
-)
+import "time"
 
-// ReadingPlan 阅读计划（复合主键：user_id + plan_id）
+// ReadingPlan 阅读计划
 type ReadingPlan struct {
 	UserID     string    `json:"user_id" db:"user_id" description:"用户ID (UUID v7)"`
 	PlanID     int       `json:"plan_id" db:"plan_id" description:"计划ID（用户级自增）"`
@@ -16,7 +14,7 @@ type ReadingPlan struct {
 	UpdatedAt  time.Time `json:"updated_at" db:"updated_at" description:"更新时间"`
 }
 
-// ReadingProgress 阅读进度（复合主键：user_id + date）
+// ReadingProgress 阅读进度
 type ReadingProgress struct {
 	UserID    string    `json:"user_id" db:"user_id" description:"用户ID (UUID v7)"`
 	Date      time.Time `json:"date" db:"date" description:"日期"`

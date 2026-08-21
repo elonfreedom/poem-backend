@@ -1,10 +1,8 @@
-package model
+package usermodel
 
-import (
-	"time"
-)
+import "time"
 
-// CheckIn 打卡记录（复合主键：user_id + date）
+// CheckIn 打卡记录
 type CheckIn struct {
 	UserID         string    `json:"user_id" db:"user_id" description:"用户ID (UUID v7)"`
 	Date           time.Time `json:"date" db:"date" description:"打卡日期"`
@@ -12,7 +10,7 @@ type CheckIn struct {
 	CreatedAt      time.Time `json:"created_at" db:"created_at" description:"创建时间"`
 }
 
-// CheckInStats 打卡统计（主键：user_id）
+// CheckInStats 打卡统计
 type CheckInStats struct {
 	UserID         string    `json:"user_id" db:"user_id" description:"用户ID (UUID v7)"`
 	TotalDays      int       `json:"total_days" db:"total_days" description:"累计打卡天数"`

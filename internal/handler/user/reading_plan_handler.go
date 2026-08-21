@@ -6,7 +6,7 @@ import (
 	"github.com/go-fuego/fuego"
 
 	"poem-backend/internal/middleware"
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 )
 
@@ -19,7 +19,7 @@ func NewReadingPlanHandler(readingPlanService *userservice.ReadingPlanService) *
 }
 
 // CreatePlan 创建阅读计划
-func (h *ReadingPlanHandler) CreatePlan(c fuego.ContextWithBody[model.CreatePlanRequest]) (*model.CreatePlanResponse, error) {
+func (h *ReadingPlanHandler) CreatePlan(c fuego.ContextWithBody[usermodel.CreatePlanRequest]) (*usermodel.CreatePlanResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -39,7 +39,7 @@ func (h *ReadingPlanHandler) CreatePlan(c fuego.ContextWithBody[model.CreatePlan
 }
 
 // GetCurrentPlan 获取当前计划
-func (h *ReadingPlanHandler) GetCurrentPlan(c fuego.ContextNoBody) (*model.CurrentPlanResponse, error) {
+func (h *ReadingPlanHandler) GetCurrentPlan(c fuego.ContextNoBody) (*usermodel.CurrentPlanResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -92,7 +92,7 @@ func (h *ReadingPlanHandler) ResumePlan(c fuego.ContextNoBody) (map[string]strin
 }
 
 // GetPlanProgress 获取计划进度
-func (h *ReadingPlanHandler) GetPlanProgress(c fuego.ContextNoBody) (*model.PlanProgressResponse, error) {
+func (h *ReadingPlanHandler) GetPlanProgress(c fuego.ContextNoBody) (*usermodel.PlanProgressResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -112,7 +112,7 @@ func (h *ReadingPlanHandler) GetPlanProgress(c fuego.ContextNoBody) (*model.Plan
 }
 
 // LogReading 记录阅读
-func (h *ReadingPlanHandler) LogReading(c fuego.ContextWithBody[model.LogReadingRequest]) (*model.LogReadingResponse, error) {
+func (h *ReadingPlanHandler) LogReading(c fuego.ContextWithBody[usermodel.LogReadingRequest]) (*usermodel.LogReadingResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}

@@ -9,7 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"poem-backend/internal/middleware"
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	adminmodel "poem-backend/internal/model/admin"
 	"poem-backend/internal/repository"
 )
@@ -100,7 +100,7 @@ func (s *AdminAuthService) SetPassword(ctx context.Context, userID, password str
 }
 
 // CreateAdminUser 创建管理员用户
-func (s *AdminAuthService) CreateAdminUser(ctx context.Context, email, password, nickname string) (*model.UserResponse, error) {
+func (s *AdminAuthService) CreateAdminUser(ctx context.Context, email, password, nickname string) (*usermodel.UserResponse, error) {
 	// 检查邮箱是否已存在
 	existing, _ := s.userRepo.GetByEmail(ctx, email)
 	if existing != nil {
@@ -115,7 +115,7 @@ func (s *AdminAuthService) CreateAdminUser(ctx context.Context, email, password,
 	passwordHash := string(hashedBytes)
 
 	// 创建用户
-	user := &model.User{
+	user := &usermodel.User{
 		ID:           uuid.New().String(),
 		Nickname:     nickname,
 		Email:        &email,

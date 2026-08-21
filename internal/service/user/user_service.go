@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -25,7 +25,7 @@ func NewUserService(
 }
 
 // GetProfile 获取个人信息
-func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.UserResponse, error) {
+func (s *UserService) GetProfile(ctx context.Context, userID string) (*usermodel.UserResponse, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
@@ -36,7 +36,7 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*model.Use
 }
 
 // UpdateProfile 更新个人信息
-func (s *UserService) UpdateProfile(ctx context.Context, userID string, req *model.UpdateProfileRequest) (*model.UserResponse, error) {
+func (s *UserService) UpdateProfile(ctx context.Context, userID string, req *usermodel.UpdateProfileRequest) (*usermodel.UserResponse, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
@@ -67,13 +67,13 @@ func (s *UserService) BindEmail(ctx context.Context, userID string, email string
 }
 
 // GetPasskeys 获取 Passkey 列表
-func (s *UserService) GetPasskeys(ctx context.Context, userID string) ([]model.PasskeyResponse, error) {
+func (s *UserService) GetPasskeys(ctx context.Context, userID string) ([]usermodel.PasskeyResponse, error) {
 	passkeys, err := s.passkeyRepo.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	var responses []model.PasskeyResponse
+	var responses []usermodel.PasskeyResponse
 	for _, p := range passkeys {
 		responses = append(responses, p.ToResponse())
 	}

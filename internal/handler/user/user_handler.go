@@ -6,7 +6,7 @@ import (
 	"github.com/go-fuego/fuego"
 
 	"poem-backend/internal/middleware"
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 )
 
@@ -19,7 +19,7 @@ func NewUserHandler(userService *userservice.UserService) *UserHandler {
 }
 
 // GetProfile 获取个人信息
-func (h *UserHandler) GetProfile(c fuego.ContextNoBody) (*model.UserResponse, error) {
+func (h *UserHandler) GetProfile(c fuego.ContextNoBody) (*usermodel.UserResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -34,7 +34,7 @@ func (h *UserHandler) GetProfile(c fuego.ContextNoBody) (*model.UserResponse, er
 }
 
 // UpdateProfile 更新个人信息
-func (h *UserHandler) UpdateProfile(c fuego.ContextWithBody[model.UpdateProfileRequest]) (*model.UserResponse, error) {
+func (h *UserHandler) UpdateProfile(c fuego.ContextWithBody[usermodel.UpdateProfileRequest]) (*usermodel.UserResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -54,7 +54,7 @@ func (h *UserHandler) UpdateProfile(c fuego.ContextWithBody[model.UpdateProfileR
 }
 
 // GetPasskeys 获取 Passkey 列表
-func (h *UserHandler) GetPasskeys(c fuego.ContextNoBody) ([]model.PasskeyResponse, error) {
+func (h *UserHandler) GetPasskeys(c fuego.ContextNoBody) ([]usermodel.PasskeyResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}

@@ -6,7 +6,7 @@ import (
 	"github.com/go-fuego/fuego"
 
 	"poem-backend/internal/middleware"
-	"poem-backend/internal/model"
+usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 )
 
@@ -19,7 +19,7 @@ func NewCheckinHandler(checkinService *userservice.CheckinService) *CheckinHandl
 }
 
 // Checkin 打卡
-func (h *CheckinHandler) Checkin(c fuego.ContextNoBody) (*model.CheckInResponse, error) {
+func (h *CheckinHandler) Checkin(c fuego.ContextNoBody) (*usermodel.CheckInResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -34,7 +34,7 @@ func (h *CheckinHandler) Checkin(c fuego.ContextNoBody) (*model.CheckInResponse,
 }
 
 // GetStats 获取打卡统计
-func (h *CheckinHandler) GetStats(c fuego.ContextNoBody) (*model.CheckInStatsResponse, error) {
+func (h *CheckinHandler) GetStats(c fuego.ContextNoBody) (*usermodel.CheckInStatsResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -49,7 +49,7 @@ func (h *CheckinHandler) GetStats(c fuego.ContextNoBody) (*model.CheckInStatsRes
 }
 
 // GetCheckinList 获取打卡记录列表
-func (h *CheckinHandler) GetCheckinList(c fuego.ContextNoBody) (*model.CheckInListResponse, error) {
+func (h *CheckinHandler) GetCheckinList(c fuego.ContextNoBody) (*usermodel.CheckInListResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -64,7 +64,7 @@ func (h *CheckinHandler) GetCheckinList(c fuego.ContextNoBody) (*model.CheckInLi
 }
 
 // GetCalendar 获取打卡日历
-func (h *CheckinHandler) GetCalendar(c fuego.ContextNoBody) (*model.CheckInCalendarResponse, error) {
+func (h *CheckinHandler) GetCalendar(c fuego.ContextNoBody) (*usermodel.CheckInCalendarResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -82,7 +82,7 @@ func (h *CheckinHandler) GetCalendar(c fuego.ContextNoBody) (*model.CheckInCalen
 }
 
 // GetRanking 获取排行榜
-func (h *CheckinHandler) GetRanking(c fuego.ContextNoBody) (*model.RankingResponse, error) {
+func (h *CheckinHandler) GetRanking(c fuego.ContextNoBody) (*usermodel.RankingResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}

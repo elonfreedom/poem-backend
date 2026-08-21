@@ -1,14 +1,12 @@
-package model
+package usermodel
 
-import (
-	"time"
-)
+import "time"
 
 // RecoveryCode 恢复码模型
 type RecoveryCode struct {
 	ID        int64      `json:"id" db:"id"`
-	UserID    string     `json:"user_id" db:"user_id"` // UUID v7
-	CodeHash  string     `json:"-" db:"code_hash"`      // bcrypt 哈希
+	UserID    string     `json:"user_id" db:"user_id"`
+	CodeHash  string     `json:"-" db:"code_hash"`
 	Used      bool       `json:"used" db:"used"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UsedAt    *time.Time `json:"used_at,omitempty" db:"used_at"`
