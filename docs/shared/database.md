@@ -46,6 +46,18 @@
 | system_configs | 系统配置 | id, key, value, remark, updated_at |
 | poem_views | 浏览记录 | id, poem_id, user_id, created_at |
 
+## 实体关系
+
+```
+users (1) ─── (N) favorites ─── (1) poems
+users (1) ─── (N) reading_plans ─── (N) reading_progress
+users (1) ─── (N) checkins
+users (1) ─── (1) checkin_stats
+poems (N) ─── (1) categories
+poems (N) ─── (N) tags (通过 poem_tags)
+poems (1) ─── (N) poem_views
+```
+
 ## 索引设计
 
 ```sql
@@ -77,3 +89,23 @@ CREATE INDEX idx_reading_progress_user_date ON reading_progress(user_id, date);
 CREATE INDEX idx_poem_views_poem_id ON poem_views(poem_id);
 CREATE INDEX idx_poem_views_created_at ON poem_views(created_at);
 ```
+
+## 数据字典
+
+### 状态枚举
+
+| 字段 | 枚举值 | 说明 |
+|-----|--------|------|
+| poems.status | draft / published / archived | 草稿 / 已发布 / 已归档 |
+| reading_plans.status | active / completed / paused | 进行中 / 已完成 / 已暂停 |
+| banners.status | active / inactive | 启用 / 禁用 |
+| announcements.status | draft / published | 草稿 / 已发布 |
+| users.role | admin / user | 管理员 / 普通用户 |
+
+### 通用字段
+
+| 字段 | 类型 | 说明 |
+|-----|------|------|
+| id | bigint | 主键，自增 |
+| created_at | timestamp | 创建时间 |
+| updated_at | timestamp | 更新时间 |

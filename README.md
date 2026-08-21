@@ -1,38 +1,52 @@
-  # Poem Backend
+# Poem Backend
 
 诗歌应用后端服务，基于 Go + Fuego 框架。
 
-## 📋 需求文档
+## 需求文档
+
+### 用户端（C端）
 
 | 文档 | 说明 |
 |-----|------|
-| [00-overview.md](docs/00-overview.md) | 项目概述 |
-| [01-auth.md](docs/01-auth.md) | 用户模块 |
-| [02-poem.md](docs/02-poem.md) | 诗歌模块 |
-| [03-favorite.md](docs/03-favorite.md) | 收藏模块 |
-| [04-reading-plan.md](docs/04-reading-plan.md) | 阅读计划 |
-| [05-checkin.md](docs/05-checkin.md) | 打卡系统 |
-| [06-stats.md](docs/06-stats.md) | 数据统计 |
-| [07-system.md](docs/07-system.md) | 系统配置 |
-| [08-database.md](docs/08-database.md) | 数据库设计 |
-| [09-api.md](docs/09-api.md) | API 汇总 |
-| [10-non-functional.md](docs/10-non-functional.md) | 非功能需求 |
+| [user/00-overview.md](docs/user/00-overview.md) | 用户端产品概述 |
+| [user/01-auth.md](docs/user/01-auth.md) | 用户系统（登录注册、个人中心） |
+| [user/02-poem.md](docs/user/02-poem.md) | 诗歌浏览（列表、详情、搜索、每日推荐） |
+| [user/03-favorite.md](docs/user/03-favorite.md) | 收藏模块 |
+| [user/04-reading-plan.md](docs/user/04-reading-plan.md) | 阅读计划 |
+| [user/05-checkin.md](docs/user/05-checkin.md) | 打卡系统 |
+| [user/06-api.md](docs/user/06-api.md) | 用户端接口汇总 |
+
+### 后台管理（Admin）
+
+| 文档 | 说明 |
+|-----|------|
+| [admin/00-overview.md](docs/admin/00-overview.md) | 后台管理产品概述 |
+| [admin/01-poem-manage.md](docs/admin/01-poem-manage.md) | 诗歌管理（诗歌/分类/标签） |
+| [admin/02-stats.md](docs/admin/02-stats.md) | 数据统计 |
+| [admin/03-system.md](docs/admin/03-system.md) | 系统配置（Banner/公告/参数） |
+| [admin/04-api.md](docs/admin/04-api.md) | 管理端接口汇总 |
+
+### 共用文档
+
+| 文档 | 说明 |
+|-----|------|
+| [shared/database.md](docs/shared/database.md) | 数据库设计 |
+| [shared/non-functional.md](docs/shared/non-functional.md) | 非功能需求 |
 
 ## 功能特性
 
-### Admin 后台管理系统
-- 内容管理（诗歌 CRUD）
-- 用户管理
-- 数据统计
-- 系统配置
-
-### User 用户端
-- 诗歌浏览、搜索
+### 用户端（C端）
+- 诗歌浏览、搜索、每日推荐
 - 收藏功能
 - 用户系统（登录、注册、个人中心）
 - 每日阅读计划
 - 每日阅读打卡
-- 打卡记录
+- 打卡记录与排行榜
+
+### 后台管理（Admin）
+- 内容管理（诗歌/分类/标签 CRUD）
+- 数据统计（用户增长、浏览量、活跃度）
+- 系统配置（Banner、公告、参数）
 
 ## 技术栈
 
@@ -89,7 +103,9 @@ poem-backend/
 ├── migrations/          # 数据库迁移
 ├── rules/               # 开发规范
 └── docs/                # 需求文档
-    └── PRD.md           # 产品需求文档
+    ├── user/            # 用户端文档
+    ├── admin/           # 后台管理文档
+    └── shared/          # 共用文档
 ```
 
 ## 开发计划

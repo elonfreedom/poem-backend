@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 )
@@ -9,6 +10,7 @@ type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	JWT      JWTConfig
+	WebAuthn WebAuthnConfig
 }
 
 type ServerConfig struct {
@@ -30,6 +32,13 @@ type JWTConfig struct {
 	ExpireHour int
 }
 
+// WebAuthnConfig WebAuthn/Passkey 配置
+type WebAuthnConfig struct {
+	RPDisplayName string // 显示名称
+	RPID          string // 域名
+	RPOrigin      string // 来源地址
+}
+
 func Load() *Config {
 	return &Config{
 		Server: ServerConfig{
@@ -48,7 +57,18 @@ func Load() *Config {
 			Secret:     getEnv("JWT_SECRET", "your-secret-key"),
 			ExpireHour: getEnvAsInt("JWT_EXPIRE_HOUR", 72),
 		},
+		WebAuthn: WebAuthnConfig{
+			RPDisplayName: getEnv("RP_DISPLAY_NAME", "晓诗"),
+			RPID:          getEnv("RP_ID", "localhost"),
+			RPOrigin:      getEnv("RP_ORIGIN", "http://localhost:3000"),
+		},
 	}
+}
+
+// ConnString 返回数据库连接字符串
+func (d DatabaseConfig) ConnString() string {
+	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
 }
 
 func getEnv(key, defaultVal string) string {

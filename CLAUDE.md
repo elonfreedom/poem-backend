@@ -62,6 +62,26 @@ pkg/
 
 **Fuego 框架**: 路由定义使用 `fuego` 的类型安全方式，handler 签名包含 `*fuego.Context[T]` 泛型参数。
 
+### Fuego 接口文档规范（必须遵守）
+
+**Handler 签名**：
+- 有入参：`func (h *Handler) Method(c fuego.ContextWithBody[RequestType]) (ResponseType, error)`
+- 无入参：`func (h *Handler) Method(c fuego.ContextNoBody) (ResponseType, error)`
+- **禁止**使用 `any` 作为请求/响应类型
+
+**路由注册**（每条路由必须包含）：
+```go
+fuego.Post(group, "/path", handler.Method,
+    fuego.OptionSummary("简短摘要"),           // 2-6 字
+    fuego.OptionOverrideDescription("详细描述"), // 必须用 Override
+    fuego.OptionTags("模块分类"),
+)
+```
+
+**错误处理**：使用 `fuego.*Error` 类型，不要用 `response.BadRequest` 等
+
+**结构体标签**：每个字段必须有 `description` 标签
+
 ## Environment Variables
 
 ```env
@@ -88,9 +108,9 @@ JWT_EXPIRE_HOUR=72
 规范已拆分到 `rules/` 目录：
 
 - `@code-style.md` - 代码规范：命名约定、错误处理、代码组织
-- `@api-style.md` - API 规范：路由设计、请求/响应格式、错误码
+- `@api-style.md` - API 规范：路由设计、Fuego 接口注释规范、模块分类
 - `@git-style.md` - Git 规范：Commit Message 格式、分支管理
 - `@dev-flow.md` - 开发流程：新功能/Bug 修复流程、测试规范
 - `@performance.md` - 性能规范：数据库优化、缓存策略
 - `@security.md` - 安全规范：认证、数据校验、敏感信息
-- `@documentation.md` - 文档规范：代码注释、API 文档
+- `@documentation.md` - 文档规范：Fuego 接口文档规范、结构体标签、检查清单

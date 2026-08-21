@@ -15,13 +15,13 @@ const UserIDKey contextKey = "user_id"
 const UserRoleKey contextKey = "user_role"
 
 type JWTClaims struct {
-	UserID int64  `json:"user_id"`
+	UserID string `json:"user_id"` // UUID v7
 	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken 生成 JWT Token
-func GenerateToken(userID int64, role, secret string, expireHour int) (string, error) {
+func GenerateToken(userID string, role, secret string, expireHour int) (string, error) {
 	claims := JWTClaims{
 		UserID: userID,
 		Role:   role,
@@ -114,11 +114,11 @@ func AdminAuthMiddleware(secret string) func(http.Handler) http.Handler {
 }
 
 // GetUserIDFromContext 从 context 获取用户 ID
-func GetUserIDFromContext(ctx context.Context) int64 {
-	if userID, ok := ctx.Value(UserIDKey).(int64); ok {
+func GetUserIDFromContext(ctx context.Context) string {
+	if userID, ok := ctx.Value(UserIDKey).(string); ok {
 		return userID
 	}
-	return 0
+	return ""
 }
 
 // GetUserRoleFromContext 从 context 获取用户角色
