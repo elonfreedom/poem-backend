@@ -10,29 +10,51 @@ import (
 	"poem-backend/internal/config"
 	"poem-backend/internal/router"
 	"poem-backend/pkg/database"
+	"poem-backend/pkg/response"
 )
 
-// vbenErrorSerializer 自定义错误序列化（适配 vben-admin {code, message} 格式）
+// 业务错误码映射
+const (
+	CodeOK            = 0
+	CodeBadRequest    = 400
+	CodeUnauthorized  = 401
+	CodeForbidden     = 403
+	CodeNotFound      = 404
+	CodeInternalError = 500
+)
+
+// vbenErrorSerializer 自定义错误序列化（适配 vben-admin）
+// 所有业务错误统一返回 HTTP 200，错误码放在 body 里：
+// {"code": 401, "data": null, "error": "未登录", "message": "未登录"}
 func vbenErrorSerializer(w http.ResponseWriter, r *http.Request, err error) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 
-	status := http.StatusInternalServerError
+	code := CodeBadRequest
 	message := err.Error()
 
-	// 尝试提取 Fuego HTTPError 的状态码和标题
+	// 提取 Fuego HTTPError 的状态码和标题
 	type httpError interface {
 		StatusCode() int
 		ErrorTitle() string
 	}
 	if he, ok := err.(httpError); ok {
-		status = he.StatusCode()
+		code = he.StatusCode()
 		message = he.ErrorTitle()
 	}
 
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{
-		"code":    status,
-		"message": message,
+	// 限制在已知错误码范围内
+	switch code {
+	case CodeBadRequest, CodeUnauthorized, CodeForbidden, CodeNotFound, CodeInternalError:
+		// ok
+	default:
+		code = CodeInternalError
+	}
+
+	json.NewEncoder(w).Encode(response.APIResponse[any]{
+		Code:    code,
+		Message: message,
+		Error:   message,
 	})
 }
 

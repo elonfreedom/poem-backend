@@ -1,11 +1,7 @@
 package admin
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
 	"strconv"
-	"strings"
 
 	"github.com/go-fuego/fuego"
 
@@ -23,44 +19,55 @@ func NewPoemHandler(poemService *admin.AdminPoemService) *PoemHandler {
 	return &PoemHandler{poemService: poemService}
 }
 
-// ImportPoems 导入诗歌（JSON 文件）
-func (h *PoemHandler) ImportPoems(c fuego.ContextNoBody) (*response.APIResponse[ImportResponse], error) {
-	file, header, err := c.Request().FormFile("file")
+// ImportError 单条导入错误
+type ImportError struct {
+	Index int    `json:"index" description:"失败记录索引"`
+	Title string `json:"title" description:"诗歌标题"`
+	Error string `json:"error" description:"错误原因"`
+}
+
+// BatchUpdateStatus 批量更新诗歌状态
+func (h *PoemHandler) BatchUpdateStatus(c fuego.ContextWithBody[adminmodel.AdminPoemBatchUpdateStatusRequest]) (*response.APIResponse[any], error) {
+	body, err := c.Body()
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid file", Detail: "请选择要上传的 JSON 文件"}
-	}
-	defer file.Close()
-
-	if !strings.HasSuffix(header.Filename, ".json") {
-		return nil, fuego.BadRequestError{Title: "invalid file type", Detail: "仅支持 JSON 文件"}
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
 	}
 
-	data, err := io.ReadAll(file)
+	if _, err := h.poemService.BatchUpdateStatus(c.Context(), body.IDs, body.Status); err != nil {
+		return nil, fuego.InternalServerError{Title: "batch update failed", Detail: err.Error()}
+	}
+
+	return response.OK[any](nil), nil
+}
+
+// ImportPoems 批量导入诗歌（JSON 数组 body）
+func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[[]adminmodel.AdminPoemCreateRequest]) (*response.APIResponse[ImportResponse], error) {
+	body, err := c.Body()
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "read error", Detail: "读取文件失败"}
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: "请求体必须是 JSON 数组"}
 	}
 
-	var poems []adminmodel.AdminPoemCreateRequest
-	if err := json.Unmarshal(data, &poems); err != nil {
-		var rawPoems []map[string]any
-		if err := json.Unmarshal(data, &rawPoems); err != nil {
-			return nil, fuego.BadRequestError{Title: "invalid json", Detail: "JSON 格式错误"}
-		}
-		poems = convertRawPoems(rawPoems)
-	}
-
-	result := ImportResponse{Total: len(poems)}
+	result := ImportResponse{Total: len(body)}
 	userID := middleware.GetUserIDFromContext(c.Context())
 
-	for i, req := range poems {
-		if req.Title == "" || req.Author == "" || req.Content == "" {
+	for i, req := range body {
+		// 校验必填字段
+		if req.Title == "" || req.Author == "" || req.Content == "" || req.Status == "" {
 			result.Failed++
-			result.Errors = append(result.Errors, "第"+strconv.Itoa(i+1)+"条：标题、作者、内容为必填项")
+			result.Errors = append(result.Errors, ImportError{
+				Index: i,
+				Title: req.Title,
+				Error: "缺少必填字段：title、author、content、status",
+			})
 			continue
 		}
 		if _, err := h.poemService.Create(c.Context(), &req, &userID); err != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, "第"+strconv.Itoa(i+1)+"条："+err.Error())
+			result.Errors = append(result.Errors, ImportError{
+				Index: i,
+				Title: req.Title,
+				Error: err.Error(),
+			})
 			continue
 		}
 		result.Success++
@@ -172,44 +179,10 @@ func (h *PoemHandler) UpdateStatus(c fuego.ContextWithBody[adminmodel.AdminPoemU
 	return response.OK[any](nil), nil
 }
 
-// ImportResponse 导入响应
+// ImportResponse 批量导入响应
 type ImportResponse struct {
-	Total   int      `json:"total" description:"总条数"`
-	Success int      `json:"success" description:"成功数"`
-	Failed  int      `json:"failed" description:"失败数"`
-	Errors  []string `json:"errors" description:"错误详情"`
+	Total   int            `json:"total" description:"总条数"`
+	Success int            `json:"success" description:"成功数"`
+	Failed  int            `json:"failed" description:"失败数"`
+	Errors  []ImportError  `json:"errors" description:"失败详情"`
 }
-
-// convertRawPoems 转换原始 JSON 格式为 AdminPoemCreateRequest
-func convertRawPoems(rawPoems []map[string]any) []adminmodel.AdminPoemCreateRequest {
-	poems := make([]adminmodel.AdminPoemCreateRequest, 0, len(rawPoems))
-	for _, raw := range rawPoems {
-		req := adminmodel.AdminPoemCreateRequest{}
-		if title, ok := raw["title"].(string); ok {
-			req.Title = title
-		}
-		if rhythmic, ok := raw["rhythmic"].(string); ok && req.Title == "" {
-			req.Title = rhythmic
-		}
-		if author, ok := raw["author"].(string); ok {
-			req.Author = author
-		}
-		if paragraphs, ok := raw["paragraphs"].([]any); ok {
-			var content []string
-			for _, p := range paragraphs {
-				if s, ok := p.(string); ok {
-					content = append(content, s)
-				}
-			}
-			req.Content = strings.Join(content, "\n")
-		}
-		if rhythmic, ok := raw["rhythmic"].(string); ok {
-			req.Tags = []string{rhythmic}
-		}
-		poems = append(poems, req)
-	}
-	return poems
-}
-
-// 避免 fmt 未使用
-var _ = fmt.Sprintf

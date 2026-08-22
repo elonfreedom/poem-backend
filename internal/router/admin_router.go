@@ -43,43 +43,43 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	announcementHandler := admin.NewAnnouncementHandler(adminAnnouncementService)
 	configHandler := admin.NewConfigHandler(adminConfigService)
 
-	// ========== 公开路由：登录 ==========
-	public := fuego.Group(server, "/api")
+	// ========== 后台管理路由组（端口 8081，全部以 /api/admin 开头）==========
+	adminGroup := fuego.Group(server, "/api/admin")
 
-	fuego.Post(public, "/auth/login", authHandler.Login,
+	// 公开：管理员登录（无需鉴权）
+	fuego.Post(adminGroup, "/auth/login", authHandler.Login,
 		fuego.OptionSummary("管理员登录"),
 		fuego.OptionOverrideDescription("后台管理员使用邮箱和密码登录，返回 JWT"),
 		fuego.OptionTags("后台认证"),
 	)
 
-	// ========== 需认证路由 ==========
-	adminGroup := fuego.Group(server, "/api")
-	fuego.Use(adminGroup, middleware.AdminAuthMiddleware(cfg.JWT.Secret))
+	// 需鉴权路由（登录后访问）
+	adminAuth := fuego.Group(server, "/api/admin")
+	fuego.Use(adminAuth, middleware.AdminAuthMiddleware(cfg.JWT.Secret))
 
-	// [后台认证] 用户信息
-	fuego.Get(adminGroup, "/user/info", authHandler.GetUserInfo,
+	// [后台认证] 用户信息（vben-admin /user/info）
+	fuego.Get(adminAuth, "/user/info", authHandler.GetUserInfo,
 		fuego.OptionSummary("获取用户信息"),
 		fuego.OptionOverrideDescription("获取当前登录管理员的个人信息"),
 		fuego.OptionTags("后台认证"),
 	)
 
 	// [后台认证] 权限码
-	fuego.Get(adminGroup, "/auth/codes", authHandler.GetAccessCodes,
+	fuego.Get(adminAuth, "/auth/codes", authHandler.GetAccessCodes,
 		fuego.OptionSummary("获取权限码"),
 		fuego.OptionOverrideDescription("获取当前管理员的权限码列表"),
 		fuego.OptionTags("后台认证"),
 	)
 
 	// [后台认证] 退出登录
-	fuego.Post(adminGroup, "/auth/logout", authHandler.Logout,
+	fuego.Post(adminAuth, "/auth/logout", authHandler.Logout,
 		fuego.OptionSummary("退出登录"),
 		fuego.OptionOverrideDescription("管理员退出登录"),
 		fuego.OptionTags("后台认证"),
 	)
 
 	// ========== 后台管理路由 ==========
-	adminMgmt := fuego.Group(server, "/api/admin")
-	fuego.Use(adminMgmt, middleware.AdminAuthMiddleware(cfg.JWT.Secret))
+	adminMgmt := adminAuth
 
 	// [诗歌管理]
 	fuego.Post(adminMgmt, "/poems/import", poemHandler.ImportPoems,
@@ -115,6 +115,11 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	fuego.Put(adminMgmt, "/poems/{id}/status", poemHandler.UpdateStatus,
 		fuego.OptionSummary("更新诗歌状态"),
 		fuego.OptionOverrideDescription("更新诗歌状态（草稿/发布/归档）"),
+		fuego.OptionTags("诗歌管理"),
+	)
+	fuego.Put(adminMgmt, "/poems/batch/status", poemHandler.BatchUpdateStatus,
+		fuego.OptionSummary("批量更新诗歌状态"),
+		fuego.OptionOverrideDescription("批量更新多首诗歌的状态"),
 		fuego.OptionTags("诗歌管理"),
 	)
 

@@ -52,12 +52,13 @@ type AdminPoemResponse struct {
 	ID           int64     `json:"id" description:"诗歌ID"`
 	Title        string    `json:"title" description:"诗歌标题"`
 	Author       string    `json:"author" description:"作者"`
-	Dynasty      string    `json:"dynasty" description:"朝代"`
+	Dynasty      string    `json:"dynasty,omitempty" description:"朝代"`
 	Content      string    `json:"content" description:"原文内容"`
 	Translation  string    `json:"translation,omitempty" description:"现代译文"`
 	Appreciation string    `json:"appreciation,omitempty" description:"赏析"`
 	CategoryID   *int64    `json:"category_id,omitempty" description:"分类ID"`
-	Tags         []string  `json:"tags" description:"标签列表"`
+	CategoryName string    `json:"category_name,omitempty" description:"分类名称"`
+	Tags         []string  `json:"tags,omitempty" description:"标签列表"`
 	CoverURL     string    `json:"cover_url,omitempty" description:"封面图片URL"`
 	Status       string    `json:"status" description:"状态: draft, published, archived"`
 	CreatedBy    *string   `json:"created_by,omitempty" description:"创建者ID"`
@@ -98,6 +99,12 @@ type AdminPoemUpdateStatusRequest struct {
 	Status string `json:"status" validate:"required,oneof=draft published archived" description:"状态"`
 }
 
+// AdminPoemBatchUpdateStatusRequest 批量更新诗歌状态请求
+type AdminPoemBatchUpdateStatusRequest struct {
+	IDs    []int64 `json:"ids" validate:"required,min=1" description:"诗歌ID数组"`
+	Status string  `json:"status" validate:"required,oneof=draft published archived" description:"目标状态"`
+}
+
 // ========== 分类管理 ==========
 
 // AdminCategoryResponse 分类响应
@@ -105,6 +112,7 @@ type AdminCategoryResponse struct {
 	ID        int64     `json:"id" description:"分类ID"`
 	Name      string    `json:"name" description:"分类名称"`
 	Sort      int       `json:"sort" description:"排序值"`
+	PoemCount int64     `json:"poem_count" description:"诗歌数量"`
 	CreatedAt time.Time `json:"created_at" description:"创建时间"`
 	UpdatedAt time.Time `json:"updated_at" description:"更新时间"`
 }
@@ -139,13 +147,11 @@ type AdminTagCreateRequest struct {
 
 // AdminStatsOverview 总览统计
 type AdminStatsOverview struct {
-	TotalPoems      int64 `json:"totalPoems" description:"诗歌总数"`
-	TotalUsers      int64 `json:"totalUsers" description:"用户总数"`
-	TotalViews      int64 `json:"totalViews" description:"总浏览量"`
-	TodayViews      int64 `json:"todayViews" description:"今日浏览"`
-	TodayUsers      int64 `json:"todayUsers" description:"今日新增用户"`
-	TotalCategories int64 `json:"totalCategories" description:"分类总数"`
-	TotalTags       int64 `json:"totalTags" description:"标签总数"`
+	TotalUsers    int64 `json:"total_users" description:"用户总数"`
+	TotalPoems    int64 `json:"total_poems" description:"诗歌总数"`
+	TotalViews    int64 `json:"total_views" description:"总浏览量"`
+	TodayActive   int64 `json:"today_active" description:"今日活跃"`
+	TodayCheckin  int64 `json:"today_checkin" description:"今日打卡"`
 }
 
 // AdminStatsDaily 每日统计

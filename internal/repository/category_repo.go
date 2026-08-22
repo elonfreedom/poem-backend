@@ -16,19 +16,32 @@ func NewCategoryRepository(db *pgxpool.Pool) *CategoryRepository {
 	return &CategoryRepository{db: db}
 }
 
-// List 获取分类列表
-func (r *CategoryRepository) List(ctx context.Context) ([]model.Category, error) {
-	query := `SELECT id, name, sort, created_at, updated_at FROM categories ORDER BY sort, id`
+// CategoryWithCount 分类及其诗歌数量
+type CategoryWithCount struct {
+	model.Category
+	PoemCount int64
+}
+
+// List 获取分类列表（含诗歌数量）
+func (r *CategoryRepository) List(ctx context.Context) ([]CategoryWithCount, error) {
+	query := `
+		SELECT c.id, c.name, c.sort, c.created_at, c.updated_at,
+		       COUNT(p.id) AS poem_count
+		FROM categories c
+		LEFT JOIN poems p ON p.category_id = c.id
+		GROUP BY c.id, c.name, c.sort, c.created_at, c.updated_at
+		ORDER BY c.sort, c.id
+	`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var categories []model.Category
+	var categories []CategoryWithCount
 	for rows.Next() {
-		var c model.Category
-		if err := rows.Scan(&c.ID, &c.Name, &c.Sort, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		var c CategoryWithCount
+		if err := rows.Scan(&c.ID, &c.Name, &c.Sort, &c.CreatedAt, &c.UpdatedAt, &c.PoemCount); err != nil {
 			return nil, err
 		}
 		categories = append(categories, c)

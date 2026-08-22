@@ -34,7 +34,7 @@ func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categor
 
 	items := make([]adminmodel.AdminPoemResponse, 0, len(poems))
 	for _, p := range poems {
-		items = append(items, toAdminPoemResponse(p))
+		items = append(items, toAdminPoemResponse(p.Poem, p.CategoryName))
 	}
 	return &response.PageData[adminmodel.AdminPoemResponse]{Items: items, Total: total}, nil
 }
@@ -45,7 +45,7 @@ func (s *AdminPoemService) GetByID(ctx context.Context, id int64) (*adminmodel.A
 	if err != nil {
 		return nil, err
 	}
-	resp := toAdminPoemResponse(*poem)
+	resp := toAdminPoemResponse(*poem, nil)
 	return &resp, nil
 }
 
@@ -75,7 +75,7 @@ func (s *AdminPoemService) Create(ctx context.Context, req *adminmodel.AdminPoem
 		return nil, err
 	}
 
-	resp := toAdminPoemResponse(*poem)
+	resp := toAdminPoemResponse(*poem, nil)
 	return &resp, nil
 }
 
@@ -113,9 +113,14 @@ func (s *AdminPoemService) UpdateStatus(ctx context.Context, id int64, status st
 	return s.poemRepo.UpdateStatus(ctx, id, status)
 }
 
+// BatchUpdateStatus 批量更新诗歌状态
+func (s *AdminPoemService) BatchUpdateStatus(ctx context.Context, ids []int64, status string) (int64, error) {
+	return s.poemRepo.BatchUpdateStatus(ctx, ids, status)
+}
+
 // toAdminPoemResponse 转换 Poem 为 AdminPoemResponse
-func toAdminPoemResponse(p model.Poem) adminmodel.AdminPoemResponse {
-	return adminmodel.AdminPoemResponse{
+func toAdminPoemResponse(p model.Poem, categoryName *string) adminmodel.AdminPoemResponse {
+	resp := adminmodel.AdminPoemResponse{
 		ID:           p.ID,
 		Title:        p.Title,
 		Author:       p.Author,
@@ -131,4 +136,8 @@ func toAdminPoemResponse(p model.Poem) adminmodel.AdminPoemResponse {
 		CreatedAt:    p.CreatedAt,
 		UpdatedAt:    p.UpdatedAt,
 	}
+	if categoryName != nil {
+		resp.CategoryName = *categoryName
+	}
+	return resp
 }

@@ -17,20 +17,18 @@ func NewAdminStatsService(statsRepo *repository.StatsRepository) *AdminStatsServ
 
 // Overview 总览数据
 func (s *AdminStatsService) Overview(ctx context.Context) (*adminmodel.AdminStatsOverview, error) {
-	totalPoems, totalUsers, totalViews, todayViews, todayUsers, totalCategories, totalTags, err :=
+	totalPoems, totalUsers, totalViews, todayActive, todayCheckin, err :=
 		s.statsRepo.GetOverview(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	return &adminmodel.AdminStatsOverview{
-		TotalPoems:      totalPoems,
-		TotalUsers:      totalUsers,
-		TotalViews:      totalViews,
-		TodayViews:      todayViews,
-		TodayUsers:      todayUsers,
-		TotalCategories: totalCategories,
-		TotalTags:       totalTags,
+		TotalUsers:   totalUsers,
+		TotalPoems:   totalPoems,
+		TotalViews:   totalViews,
+		TodayActive:  todayActive,
+		TodayCheckin: todayCheckin,
 	}, nil
 }
 

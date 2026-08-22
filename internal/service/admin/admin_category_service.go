@@ -17,19 +17,20 @@ func NewAdminCategoryService(categoryRepo *repository.CategoryRepository) *Admin
 	return &AdminCategoryService{categoryRepo: categoryRepo}
 }
 
-// List 获取分类列表
+// List 获取分类列表（含诗歌数量）
 func (s *AdminCategoryService) List(ctx context.Context) ([]adminmodel.AdminCategoryResponse, error) {
 	categories, err := s.categoryRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	items := make([]adminmodel.AdminCategoryResponse, 0, len(categories))
+	items := []adminmodel.AdminCategoryResponse{}
 	for _, c := range categories {
 		items = append(items, adminmodel.AdminCategoryResponse{
 			ID:        c.ID,
 			Name:      c.Name,
 			Sort:      c.Sort,
+			PoemCount: c.PoemCount,
 			CreatedAt: c.CreatedAt,
 			UpdatedAt: c.UpdatedAt,
 		})
@@ -54,6 +55,7 @@ func (s *AdminCategoryService) Create(ctx context.Context, req *adminmodel.Admin
 		ID:        category.ID,
 		Name:      category.Name,
 		Sort:      category.Sort,
+		PoemCount: 0,
 		CreatedAt: category.CreatedAt,
 		UpdatedAt: category.UpdatedAt,
 	}, nil

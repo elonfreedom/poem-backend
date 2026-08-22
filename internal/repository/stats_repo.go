@@ -16,7 +16,7 @@ func NewStatsRepository(db *pgxpool.Pool) *StatsRepository {
 }
 
 // GetOverview 获取总览统计
-func (r *StatsRepository) GetOverview(ctx context.Context) (totalPoems, totalUsers, totalViews, todayViews, todayUsers, totalCategories, totalTags int64, err error) {
+func (r *StatsRepository) GetOverview(ctx context.Context) (totalPoems, totalUsers, totalViews, todayActive, todayCheckin int64, err error) {
 	// 诗歌总数
 	err = r.db.QueryRow(ctx, "SELECT COUNT(*) FROM poems").Scan(&totalPoems)
 	if err != nil {
@@ -32,24 +32,14 @@ func (r *StatsRepository) GetOverview(ctx context.Context) (totalPoems, totalUse
 	if err != nil {
 		return
 	}
-	// 今日浏览量
+	// 今日活跃（有浏览行为的用户数）
 	today := time.Now().Format("2006-01-02")
-	err = r.db.QueryRow(ctx, "SELECT COUNT(*) FROM poem_views WHERE created_at::date = $1::date", today).Scan(&todayViews)
+	err = r.db.QueryRow(ctx, "SELECT COUNT(DISTINCT user_id) FROM poem_views WHERE created_at::date = $1::date", today).Scan(&todayActive)
 	if err != nil {
 		return
 	}
-	// 今日新增用户
-	err = r.db.QueryRow(ctx, "SELECT COUNT(*) FROM users WHERE created_at::date = $1::date", today).Scan(&todayUsers)
-	if err != nil {
-		return
-	}
-	// 分类总数
-	err = r.db.QueryRow(ctx, "SELECT COUNT(*) FROM categories").Scan(&totalCategories)
-	if err != nil {
-		return
-	}
-	// 标签总数
-	err = r.db.QueryRow(ctx, "SELECT COUNT(*) FROM tags").Scan(&totalTags)
+	// 今日打卡数
+	err = r.db.QueryRow(ctx, "SELECT COUNT(*) FROM checkins WHERE created_at::date = $1::date", today).Scan(&todayCheckin)
 	return
 }
 

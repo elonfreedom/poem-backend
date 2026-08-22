@@ -9,7 +9,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"poem-backend/internal/middleware"
-usermodel "poem-backend/internal/model/user"
+	"strings"
+	usermodel "poem-backend/internal/model/user"
 	adminmodel "poem-backend/internal/model/admin"
 	"poem-backend/internal/repository"
 )
@@ -30,6 +31,10 @@ func NewAdminAuthService(userRepo *repository.UserRepository, jwtSecret string, 
 
 // Login 后台管理员登录（适配 vben-admin，username 即邮箱）
 func (s *AdminAuthService) Login(ctx context.Context, username, password string) (*adminmodel.AdminLoginResponse, error) {
+	// 去除首尾空格（前端可能带入空格）
+	username = strings.TrimSpace(username)
+	password = strings.TrimSpace(password)
+
 	// 查找用户（vben-admin 使用 username 字段，实际为邮箱）
 	user, err := s.userRepo.GetByEmailWithPassword(ctx, username)
 	if err != nil {
