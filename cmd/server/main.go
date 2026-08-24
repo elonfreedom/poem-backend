@@ -58,6 +58,48 @@ func vbenErrorSerializer(w http.ResponseWriter, r *http.Request, err error) {
 	})
 }
 
+// standardErrorSerializer 标准错误序列化（用户端 C 端）
+// 返回真正的 HTTP 状态码，前端通过状态码判断请求是否成功
+// 成功：HTTP 200，失败：HTTP 400/401/403/404/500
+func standardErrorSerializer(w http.ResponseWriter, r *http.Request, err error) {
+	w.Header().Set("Content-Type", "application/json")
+
+	code := CodeBadRequest
+	message := err.Error()
+
+	// 提取 Fuego HTTPError 的状态码和标题
+	type httpError interface {
+		StatusCode() int
+		ErrorTitle() string
+	}
+	if he, ok := err.(httpError); ok {
+		code = he.StatusCode()
+		message = he.ErrorTitle()
+	}
+
+	// 限制在已知错误码范围内，并映射到 HTTP 状态码
+	httpStatus := http.StatusOK
+	switch code {
+	case CodeBadRequest:
+		httpStatus = http.StatusBadRequest
+	case CodeUnauthorized:
+		httpStatus = http.StatusUnauthorized
+	case CodeForbidden:
+		httpStatus = http.StatusForbidden
+	case CodeNotFound:
+		httpStatus = http.StatusNotFound
+	default:
+		httpStatus = http.StatusInternalServerError
+	}
+
+	w.WriteHeader(httpStatus)
+	_ = json.NewEncoder(w).Encode(response.APIResponse[any]{
+		Code:    code,
+		Message: message,
+		Error:   message,
+	})
+}
+
 func main() {
 	// Load configuration
 	cfg := config.Load()
@@ -68,11 +110,11 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// 用户端 API Server - :8080
+	// 用户端 API Server - :8080（使用标准 HTTP 状态码）
 	userServer := fuego.NewServer(
 		fuego.WithAddr(":8080"),
 		fuego.WithoutAutoGroupTags(),
-		fuego.WithErrorSerializer(vbenErrorSerializer),
+		fuego.WithErrorSerializer(standardErrorSerializer),
 	)
 	router.SetupUserRoutes(userServer, db, cfg)
 

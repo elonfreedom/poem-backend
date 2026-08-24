@@ -1,8 +1,7 @@
 package user
 
 import (
-	"bytes"
-	"encoding/json"
+	"io"
 	"net/http"
 	"sync"
 
@@ -78,7 +77,7 @@ type BeginRegistrationResponse struct {
 	Options   any    `json:"options" description:"WebAuthn 公钥凭证选项"`
 	Session   any    `json:"session" description:"会话数据（需返回给服务端）"`
 	UserID    string `json:"user_id" description:"临时用户 ID"`
-	SessionID string `json:"session_id" description:"会话 ID（需返回给服务端）"`
+	SessionID string `json:"session_id" description:"会话 ID（通过 X-Session-ID header 回传）"`
 }
 
 // BeginRegistration 开始注册
@@ -107,36 +106,27 @@ func (h *AuthHandler) BeginRegistration(c fuego.ContextWithBody[BeginRegistratio
 	}, nil
 }
 
-// FinishRegistrationRequest 完成注册请求
-type FinishRegistrationRequest struct {
-	SessionID  string `json:"session_id" description:"会话 ID"`
-	Credential any    `json:"credential" description:"WebAuthn 凭证"`
-}
-
 // FinishRegistration 完成注册
-func (h *AuthHandler) FinishRegistration(c fuego.ContextWithBody[FinishRegistrationRequest]) (*usermodel.LoginResponse, error) {
-	body, err := c.Body()
-	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+// 请求体：标准 RegistrationResponseJSON（id, rawId, response: {clientDataJSON, attestationObject, ...}）
+// 会话 ID：通过 X-Session-ID header 传递
+func (h *AuthHandler) FinishRegistration(c fuego.ContextNoBody) (*usermodel.LoginResponse, error) {
+	// 从 header 获取 session_id
+	sessionID := c.Header("X-Session-ID")
+	if sessionID == "" {
+		return nil, fuego.BadRequestError{Title: "missing session", Detail: "X-Session-ID header is required"}
 	}
 
 	// 获取会话数据
-	sessionData, ok := h.sessionStore.Get(body.SessionID)
+	sessionData, ok := h.sessionStore.Get(sessionID)
 	if !ok {
 		return nil, fuego.BadRequestError{Title: "invalid session", Detail: "会话不存在或已过期"}
 	}
 
 	// 删除会话（一次性使用）
-	h.sessionStore.Delete(body.SessionID)
+	h.sessionStore.Delete(sessionID)
 
-	// 将凭证序列化为 JSON
-	credentialJSON, err := json.Marshal(body.Credential)
-	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid credential", Detail: "凭证格式错误"}
-	}
-
-	// 构造包含凭证的请求
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", bytes.NewReader(credentialJSON))
+	// 使用原始请求体直接传递给 WebAuthn 库
+	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", io.NopCloser(c.Request().Body))
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "failed to create request", Detail: err.Error()}
 	}
@@ -150,7 +140,7 @@ func (h *AuthHandler) FinishRegistration(c fuego.ContextWithBody[FinishRegistrat
 type BeginLoginResponse struct {
 	Options   any    `json:"options" description:"WebAuthn 公钥凭证选项"`
 	Session   any    `json:"session" description:"会话数据（需返回给服务端）"`
-	SessionID string `json:"session_id" description:"会话 ID（需返回给服务端）"`
+	SessionID string `json:"session_id" description:"会话 ID（通过 X-Session-ID header 回传）"`
 }
 
 // BeginLogin 开始登录（无需请求体）
@@ -172,36 +162,27 @@ func (h *AuthHandler) BeginLogin(c fuego.ContextNoBody) (*BeginLoginResponse, er
 	}, nil
 }
 
-// FinishLoginRequest 完成登录请求
-type FinishLoginRequest struct {
-	SessionID  string `json:"session_id" description:"会话 ID"`
-	Credential any    `json:"credential" description:"WebAuthn 凭证"`
-}
-
 // FinishLogin 完成登录
-func (h *AuthHandler) FinishLogin(c fuego.ContextWithBody[FinishLoginRequest]) (*usermodel.LoginResponse, error) {
-	body, err := c.Body()
-	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+// 请求体：标准 AuthenticationResponseJSON（id, rawId, response: {clientDataJSON, authenticatorData, signature, ...}）
+// 会话 ID：通过 X-Session-ID header 传递
+func (h *AuthHandler) FinishLogin(c fuego.ContextNoBody) (*usermodel.LoginResponse, error) {
+	// 从 header 获取 session_id
+	sessionID := c.Header("X-Session-ID")
+	if sessionID == "" {
+		return nil, fuego.BadRequestError{Title: "missing session", Detail: "X-Session-ID header is required"}
 	}
 
 	// 获取会话数据
-	sessionData, ok := h.sessionStore.Get(body.SessionID)
+	sessionData, ok := h.sessionStore.Get(sessionID)
 	if !ok {
 		return nil, fuego.BadRequestError{Title: "invalid session", Detail: "会话不存在或已过期"}
 	}
 
 	// 删除会话（一次性使用）
-	h.sessionStore.Delete(body.SessionID)
+	h.sessionStore.Delete(sessionID)
 
-	// 将凭证序列化为 JSON
-	credentialJSON, err := json.Marshal(body.Credential)
-	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid credential", Detail: "凭证格式错误"}
-	}
-
-	// 构造包含凭证的请求
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", bytes.NewReader(credentialJSON))
+	// 使用原始请求体直接传递给 WebAuthn 库
+	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", io.NopCloser(c.Request().Body))
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "failed to create request", Detail: err.Error()}
 	}
