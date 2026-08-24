@@ -51,7 +51,7 @@ func vbenErrorSerializer(w http.ResponseWriter, r *http.Request, err error) {
 		code = CodeInternalError
 	}
 
-	json.NewEncoder(w).Encode(response.APIResponse[any]{
+	_ = json.NewEncoder(w).Encode(response.APIResponse[any]{
 		Code:    code,
 		Message: message,
 		Error:   message,
@@ -67,7 +67,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
 
 	// 用户端 API Server - :8080
 	userServer := fuego.NewServer(
@@ -95,8 +94,9 @@ func main() {
 		}
 	}()
 
-	// 主线程运行 admin server
+	// 主线程运行 admin server，退出时关闭数据库
 	if err := adminServer.Run(); err != nil {
 		log.Fatalf("后台服务启动失败: %v", err)
 	}
+	db.Close()
 }

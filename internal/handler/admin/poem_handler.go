@@ -181,8 +181,8 @@ func (h *PoemHandler) UpdateStatus(c fuego.ContextWithBody[adminmodel.AdminPoemU
 
 // ImportResponse 批量导入响应
 type ImportResponse struct {
-	Total   int            `json:"total" description:"总条数"`
-	Success int            `json:"success" description:"成功数"`
-	Failed  int            `json:"failed" description:"失败数"`
-	Errors  []ImportError  `json:"errors" description:"失败详情"`
+	Total   int           `json:"total" description:"总条数"`
+	Success int           `json:"success" description:"成功数"`
+	Failed  int           `json:"failed" description:"失败数"`
+	Errors  []ImportError `json:"errors" description:"失败详情"`
 }

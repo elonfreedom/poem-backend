@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -25,13 +25,20 @@ func (s *ReadingPlanService) CreatePlan(ctx context.Context, userID string, req 
 		return nil, fmt.Errorf("you already have an active plan")
 	}
 
-	now := time.Now()
-	endDate := now.AddDate(0, 0, req.Duration-1)
+	// 解析开始日期，默认今天
+	startDate := time.Now()
+	if req.StartDate != "" {
+		if d, err := time.Parse("2006-01-02", req.StartDate); err == nil {
+			startDate = d
+		}
+	}
+	endDate := startDate.AddDate(0, 0, req.Duration-1)
 
 	plan := &usermodel.ReadingPlan{
 		UserID:     userID,
+		Title:      req.Title,
 		DailyCount: req.DailyCount,
-		StartDate:  now,
+		StartDate:  startDate,
 		EndDate:    endDate,
 		Status:     "active",
 		CreatedAt:  time.Now(),
@@ -44,6 +51,7 @@ func (s *ReadingPlanService) CreatePlan(ctx context.Context, userID string, req 
 
 	return &usermodel.CreatePlanResponse{
 		PlanID:     plan.PlanID,
+		Title:      plan.Title,
 		DailyCount: plan.DailyCount,
 		StartDate:  plan.StartDate,
 		EndDate:    plan.EndDate,
@@ -120,8 +128,8 @@ func (s *ReadingPlanService) LogReading(ctx context.Context, userID string, poem
 	progress, _ := s.readingPlanRepo.GetProgress(ctx, userID, today)
 	if progress == nil {
 		progress = &usermodel.ReadingProgress{
-			UserID:  userID,
-			Date:    today,
+			UserID:    userID,
+			Date:      today,
 			CreatedAt: time.Now(),
 		}
 	}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 )
 
 type PasskeyRepository struct {

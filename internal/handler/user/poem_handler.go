@@ -6,7 +6,7 @@ import (
 	"github.com/go-fuego/fuego"
 
 	"poem-backend/internal/middleware"
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 )
 
@@ -24,20 +24,22 @@ func (h *PoemHandler) List(c fuego.ContextNoBody) (*usermodel.PoemListResponse, 
 	if page < 1 {
 		page = 1
 	}
-	pageSize, _ := strconv.Atoi(c.QueryParam("page_size"))
-	if pageSize < 1 || pageSize > 50 {
-		pageSize = 10
+	perPage, _ := strconv.Atoi(c.QueryParam("per_page"))
+	if perPage < 1 || perPage > 50 {
+		perPage = 10
 	}
 
 	var categoryID *int64
-	if cid := c.QueryParam("category_id"); cid != "" {
+	if cid := c.QueryParam("category"); cid != "" {
 		id, err := strconv.ParseInt(cid, 10, 64)
 		if err == nil {
 			categoryID = &id
 		}
 	}
 
-	result, err := h.poemService.List(c.Context(), page, pageSize, categoryID)
+	dynasty := c.QueryParam("dynasty")
+
+	result, err := h.poemService.List(c.Context(), page, perPage, categoryID, dynasty)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
@@ -68,7 +70,7 @@ func (h *PoemHandler) GetByID(c fuego.ContextNoBody) (*usermodel.PoemResponse, e
 
 // Search 搜索诗歌
 func (h *PoemHandler) Search(c fuego.ContextNoBody) (*usermodel.PoemListResponse, error) {
-	keyword := c.QueryParam("keyword")
+	keyword := c.QueryParam("q")
 	if keyword == "" {
 		return nil, fuego.BadRequestError{Title: "missing keyword", Detail: "搜索关键词不能为空"}
 	}

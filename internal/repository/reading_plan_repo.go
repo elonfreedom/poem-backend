@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 )
 
 type ReadingPlanRepository struct {
@@ -28,11 +28,11 @@ func (r *ReadingPlanRepository) Create(ctx context.Context, plan *usermodel.Read
 	plan.PlanID = maxPlanID + 1
 
 	query := `
-		INSERT INTO reading_plans (user_id, plan_id, daily_count, start_date, end_date, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO reading_plans (user_id, plan_id, title, daily_count, start_date, end_date, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 	_, err = r.db.Exec(ctx, query,
-		plan.UserID, plan.PlanID, plan.DailyCount, plan.StartDate, plan.EndDate,
+		plan.UserID, plan.PlanID, plan.Title, plan.DailyCount, plan.StartDate, plan.EndDate,
 		plan.Status, plan.CreatedAt, plan.UpdatedAt)
 	return err
 }
@@ -40,12 +40,12 @@ func (r *ReadingPlanRepository) Create(ctx context.Context, plan *usermodel.Read
 // GetByID 根据 user_id 和 plan_id 获取计划
 func (r *ReadingPlanRepository) GetByID(ctx context.Context, userID string, planID int) (*usermodel.ReadingPlan, error) {
 	query := `
-		SELECT user_id, plan_id, daily_count, start_date, end_date, status, created_at, updated_at
+		SELECT user_id, plan_id, title, daily_count, start_date, end_date, status, created_at, updated_at
 		FROM reading_plans WHERE user_id = $1 AND plan_id = $2
 	`
 	row := r.db.QueryRow(ctx, query, userID, planID)
 	var plan usermodel.ReadingPlan
-	err := row.Scan(&plan.UserID, &plan.PlanID, &plan.DailyCount, &plan.StartDate,
+	err := row.Scan(&plan.UserID, &plan.PlanID, &plan.Title, &plan.DailyCount, &plan.StartDate,
 		&plan.EndDate, &plan.Status, &plan.CreatedAt, &plan.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -56,13 +56,13 @@ func (r *ReadingPlanRepository) GetByID(ctx context.Context, userID string, plan
 // GetActiveByUserID 获取用户当前进行中的计划
 func (r *ReadingPlanRepository) GetActiveByUserID(ctx context.Context, userID string) (*usermodel.ReadingPlan, error) {
 	query := `
-		SELECT user_id, plan_id, daily_count, start_date, end_date, status, created_at, updated_at
+		SELECT user_id, plan_id, title, daily_count, start_date, end_date, status, created_at, updated_at
 		FROM reading_plans WHERE user_id = $1 AND status = 'active'
 		ORDER BY created_at DESC LIMIT 1
 	`
 	row := r.db.QueryRow(ctx, query, userID)
 	var plan usermodel.ReadingPlan
-	err := row.Scan(&plan.UserID, &plan.PlanID, &plan.DailyCount, &plan.StartDate,
+	err := row.Scan(&plan.UserID, &plan.PlanID, &plan.Title, &plan.DailyCount, &plan.StartDate,
 		&plan.EndDate, &plan.Status, &plan.CreatedAt, &plan.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -75,6 +75,14 @@ func (r *ReadingPlanRepository) UpdateStatus(ctx context.Context, userID string,
 	query := `UPDATE reading_plans SET status = $1, updated_at = NOW() WHERE user_id = $2 AND plan_id = $3`
 	_, err := r.db.Exec(ctx, query, status, userID, planID)
 	return err
+}
+
+// CountByUserID 获取用户阅读计划数量
+func (r *ReadingPlanRepository) CountByUserID(ctx context.Context, userID string) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM reading_plans WHERE user_id = $1`
+	err := r.db.QueryRow(ctx, query, userID).Scan(&count)
+	return count, err
 }
 
 // GetProgress 获取阅读进度

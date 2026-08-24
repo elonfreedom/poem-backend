@@ -87,6 +87,13 @@ func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config)
 		fuego.OptionTags("Passkey 认证"),
 	)
 
+	// 公开：每日推荐诗歌（无需认证）
+	fuego.Get(public, "/poems/daily", poemHandler.GetDaily,
+		fuego.OptionSummary("每日推荐"),
+		fuego.OptionOverrideDescription("获取每日推荐诗歌（公开，无需认证）"),
+		fuego.OptionTags("诗歌浏览"),
+	)
+
 	// ========== 用户路由（需认证）==========
 	userGroup := fuego.Group(server, "/api/user")
 	fuego.Use(userGroup, middleware.AuthMiddleware(cfg.JWT.Secret))

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -18,11 +18,17 @@ func NewCheckinService(checkinRepo *repository.CheckinRepository) *CheckinServic
 }
 
 // Checkin 打卡
-func (s *CheckinService) Checkin(ctx context.Context, userID string) (*usermodel.CheckInResponse, error) {
-	today := time.Now()
+func (s *CheckinService) Checkin(ctx context.Context, userID string, date string, poemID *int64) (*usermodel.CheckInResponse, error) {
+	// 解析日期，默认今天
+	checkinDate := time.Now()
+	if date != "" {
+		if d, err := time.Parse("2006-01-02", date); err == nil {
+			checkinDate = d
+		}
+	}
 
-	// 检查今天是否已打卡
-	existing, _ := s.checkinRepo.GetByDate(ctx, userID, today)
+	// 检查当天是否已打卡
+	existing, _ := s.checkinRepo.GetByDate(ctx, userID, checkinDate)
 	if existing != nil {
 		return &usermodel.CheckInResponse{
 			Date:           existing.Date,
@@ -34,7 +40,7 @@ func (s *CheckinService) Checkin(ctx context.Context, userID string) (*usermodel
 	consecutiveDay := 1
 	lastCheckin, _ := s.checkinRepo.GetLastCheckIn(ctx, userID)
 	if lastCheckin != nil {
-		yesterday := today.AddDate(0, 0, -1)
+		yesterday := checkinDate.AddDate(0, 0, -1)
 		if lastCheckin.Date.Equal(yesterday) || lastCheckin.Date.After(yesterday) {
 			consecutiveDay = lastCheckin.ConsecutiveDay + 1
 		}
@@ -43,9 +49,12 @@ func (s *CheckinService) Checkin(ctx context.Context, userID string) (*usermodel
 	// 创建打卡记录
 	checkin := &usermodel.CheckIn{
 		UserID:         userID,
-		Date:           today,
+		Date:           checkinDate,
 		ConsecutiveDay: consecutiveDay,
 		CreatedAt:      time.Now(),
+	}
+	if poemID != nil {
+		checkin.PoemID = poemID
 	}
 	if err := s.checkinRepo.Create(ctx, checkin); err != nil {
 		return nil, fmt.Errorf("failed to checkin: %w", err)
@@ -63,7 +72,7 @@ func (s *CheckinService) Checkin(ctx context.Context, userID string) (*usermodel
 	if consecutiveDay > stats.MaxConsecutive {
 		stats.MaxConsecutive = consecutiveDay
 	}
-	stats.LastCheckIn = today
+	stats.LastCheckIn = checkinDate
 
 	if err := s.checkinRepo.UpsertStats(ctx, stats); err != nil {
 		return nil, fmt.Errorf("failed to update stats: %w", err)
@@ -96,8 +105,21 @@ func (s *CheckinService) GetStats(ctx context.Context, userID string) (*usermode
 }
 
 // GetCheckinList 获取打卡记录列表
-func (s *CheckinService) GetCheckinList(ctx context.Context, userID string, page, pageSize int) (*usermodel.CheckInListResponse, error) {
-	checkins, total, err := s.checkinRepo.List(ctx, userID, page, pageSize)
+func (s *CheckinService) GetCheckinList(ctx context.Context, userID string, page, pageSize int, startDate, endDate string) (*usermodel.CheckInListResponse, error) {
+	// 解析日期范围
+	var start, end time.Time
+	if startDate != "" {
+		if d, err := time.Parse("2006-01-02", startDate); err == nil {
+			start = d
+		}
+	}
+	if endDate != "" {
+		if d, err := time.Parse("2006-01-02", endDate); err == nil {
+			end = d
+		}
+	}
+
+	checkins, total, err := s.checkinRepo.List(ctx, userID, page, pageSize, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list checkins: %w", err)
 	}

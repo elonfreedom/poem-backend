@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 )
 
 type FavoriteRepository struct {
@@ -32,6 +32,14 @@ func (r *FavoriteRepository) Delete(ctx context.Context, userID string, poemID i
 	query := `DELETE FROM favorites WHERE user_id = $1 AND poem_id = $2`
 	_, err := r.db.Exec(ctx, query, userID, poemID)
 	return err
+}
+
+// CountByUserID 获取用户收藏数量
+func (r *FavoriteRepository) CountByUserID(ctx context.Context, userID string) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM favorites WHERE user_id = $1`
+	err := r.db.QueryRow(ctx, query, userID).Scan(&count)
+	return count, err
 }
 
 // List 获取收藏列表

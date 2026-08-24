@@ -6,7 +6,7 @@ import (
 	"github.com/go-fuego/fuego"
 
 	"poem-backend/internal/middleware"
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 )
 
@@ -18,14 +18,25 @@ func NewCheckinHandler(checkinService *userservice.CheckinService) *CheckinHandl
 	return &CheckinHandler{checkinService: checkinService}
 }
 
+// CheckinRequest 打卡请求
+type CheckinRequest struct {
+	Date   string `json:"date" description:"打卡日期（YYYY-MM-DD，可选，默认今天）"`
+	PoemID *int64 `json:"poem_id" description:"关联诗歌ID（可选）"`
+}
+
 // Checkin 打卡
-func (h *CheckinHandler) Checkin(c fuego.ContextNoBody) (*usermodel.CheckInResponse, error) {
+func (h *CheckinHandler) Checkin(c fuego.ContextWithBody[CheckinRequest]) (*usermodel.CheckInResponse, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
 	}
 
-	result, err := h.checkinService.Checkin(c.Context(), userID)
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	result, err := h.checkinService.Checkin(c.Context(), userID, body.Date, body.PoemID)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
@@ -55,7 +66,10 @@ func (h *CheckinHandler) GetCheckinList(c fuego.ContextNoBody) (*usermodel.Check
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
 	}
 
-	result, err := h.checkinService.GetCheckinList(c.Context(), userID, 1, 30)
+	startDate := c.QueryParam("start_date")
+	endDate := c.QueryParam("end_date")
+
+	result, err := h.checkinService.GetCheckinList(c.Context(), userID, 1, 30, startDate, endDate)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}

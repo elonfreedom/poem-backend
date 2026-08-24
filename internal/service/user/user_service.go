@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 

@@ -8,10 +8,11 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"poem-backend/internal/middleware"
 	"strings"
-	usermodel "poem-backend/internal/model/user"
+
+	"poem-backend/internal/middleware"
 	adminmodel "poem-backend/internal/model/admin"
+	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -64,7 +65,7 @@ func (s *AdminAuthService) Login(ctx context.Context, username, password string)
 
 	return &adminmodel.AdminLoginResponse{
 		AccessToken: token,
-		User:        adminmodel.AdminUserResponse{
+		User: adminmodel.AdminUserResponse{
 			ID:        user.ID,
 			Nickname:  user.Nickname,
 			Role:      user.Role,

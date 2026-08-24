@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -17,8 +17,8 @@ func NewPoemService(poemRepo *repository.PoemRepository) *PoemService {
 }
 
 // List 获取诗歌列表
-func (s *PoemService) List(ctx context.Context, page, pageSize int, categoryID *int64) (*usermodel.PoemListResponse, error) {
-	poems, total, err := s.poemRepo.List(ctx, page, pageSize, categoryID, "published")
+func (s *PoemService) List(ctx context.Context, page, pageSize int, categoryID *int64, dynasty string) (*usermodel.PoemListResponse, error) {
+	poems, total, err := s.poemRepo.List(ctx, page, pageSize, categoryID, "published", dynasty)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list poems: %w", err)
 	}
@@ -26,10 +26,10 @@ func (s *PoemService) List(ctx context.Context, page, pageSize int, categoryID *
 	list := make([]usermodel.PoemListItem, 0, len(poems))
 	for _, p := range poems {
 		list = append(list, usermodel.PoemListItem{
-			ID:    p.ID,
-			Title: p.Title,
-			Author: p.Author,
-			Dynasty: p.Dynasty,
+			ID:       p.ID,
+			Title:    p.Title,
+			Author:   p.Author,
+			Dynasty:  p.Dynasty,
 			CoverURL: p.CoverURL,
 		})
 	}
@@ -47,8 +47,8 @@ func (s *PoemService) GetByID(ctx context.Context, poemID int64, userID *string)
 		return nil, fmt.Errorf("poem not found: %w", err)
 	}
 
-	// 记录浏览
-	s.poemRepo.RecordView(ctx, poemID, userID)
+	// 记录浏览（忽略错误，不影响主流程）
+	_ = s.poemRepo.RecordView(ctx, poemID, userID)
 
 	// 检查是否已收藏
 	isFavorited := false
@@ -57,16 +57,16 @@ func (s *PoemService) GetByID(ctx context.Context, poemID int64, userID *string)
 	}
 
 	resp := usermodel.PoemResponse{
-		ID:          poem.ID,
-		Title:       poem.Title,
-		Author:      poem.Author,
-		Dynasty:     poem.Dynasty,
-		Content:     poem.Content,
-		Translation: poem.Translation,
+		ID:           poem.ID,
+		Title:        poem.Title,
+		Author:       poem.Author,
+		Dynasty:      poem.Dynasty,
+		Content:      poem.Content,
+		Translation:  poem.Translation,
 		Appreciation: poem.Appreciation,
-		Tags:        poem.Tags,
-		CoverURL:    poem.CoverURL,
-		IsFavorited: isFavorited,
+		Tags:         poem.Tags,
+		CoverURL:     poem.CoverURL,
+		IsFavorited:  isFavorited,
 	}
 
 	return &resp, nil
@@ -82,10 +82,10 @@ func (s *PoemService) Search(ctx context.Context, keyword string, page, pageSize
 	list := make([]usermodel.PoemListItem, 0, len(poems))
 	for _, p := range poems {
 		list = append(list, usermodel.PoemListItem{
-			ID:    p.ID,
-			Title: p.Title,
-			Author: p.Author,
-			Dynasty: p.Dynasty,
+			ID:       p.ID,
+			Title:    p.Title,
+			Author:   p.Author,
+			Dynasty:  p.Dynasty,
 			CoverURL: p.CoverURL,
 		})
 	}
@@ -104,15 +104,15 @@ func (s *PoemService) GetDailyRecommendation(ctx context.Context) (*usermodel.Po
 	}
 
 	resp := usermodel.PoemResponse{
-		ID:          poem.ID,
-		Title:       poem.Title,
-		Author:      poem.Author,
-		Dynasty:     poem.Dynasty,
-		Content:     poem.Content,
-		Translation: poem.Translation,
+		ID:           poem.ID,
+		Title:        poem.Title,
+		Author:       poem.Author,
+		Dynasty:      poem.Dynasty,
+		Content:      poem.Content,
+		Translation:  poem.Translation,
 		Appreciation: poem.Appreciation,
-		Tags:        poem.Tags,
-		CoverURL:    poem.CoverURL,
+		Tags:         poem.Tags,
+		CoverURL:     poem.CoverURL,
 	}
 
 	return &resp, nil

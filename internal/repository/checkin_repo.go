@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 )
 
 type CheckinRepository struct {
@@ -20,11 +20,11 @@ func NewCheckinRepository(db *pgxpool.Pool) *CheckinRepository {
 // Create 创建打卡记录
 func (r *CheckinRepository) Create(ctx context.Context, checkin *usermodel.CheckIn) error {
 	query := `
-		INSERT INTO checkins (user_id, date, consecutive_day, created_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO checkins (user_id, date, consecutive_day, poem_id, created_at)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (user_id, date) DO NOTHING
 	`
-	_, err := r.db.Exec(ctx, query, checkin.UserID, checkin.Date, checkin.ConsecutiveDay, checkin.CreatedAt)
+	_, err := r.db.Exec(ctx, query, checkin.UserID, checkin.Date, checkin.ConsecutiveDay, checkin.PoemID, checkin.CreatedAt)
 	return err
 }
 
@@ -57,11 +57,26 @@ func (r *CheckinRepository) GetLastCheckIn(ctx context.Context, userID string) (
 }
 
 // List 获取打卡记录列表
-func (r *CheckinRepository) List(ctx context.Context, userID string, page, pageSize int) ([]usermodel.CheckIn, int64, error) {
+func (r *CheckinRepository) List(ctx context.Context, userID string, page, pageSize int, start, end time.Time) ([]usermodel.CheckIn, int64, error) {
+	where := "WHERE user_id = $1"
+	args := []interface{}{userID}
+	argIdx := 2
+
+	if !start.IsZero() {
+		where += " AND date >= $" + string(rune('0'+argIdx))
+		args = append(args, start)
+		argIdx++
+	}
+	if !end.IsZero() {
+		where += " AND date <= $" + string(rune('0'+argIdx))
+		args = append(args, end)
+		argIdx++
+	}
+
 	// 获取总数
-	countQuery := `SELECT COUNT(*) FROM checkins WHERE user_id = $1`
+	countQuery := "SELECT COUNT(*) FROM checkins " + where
 	var total int64
-	err := r.db.QueryRow(ctx, countQuery, userID).Scan(&total)
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -69,11 +84,12 @@ func (r *CheckinRepository) List(ctx context.Context, userID string, page, pageS
 	// 获取列表
 	query := `
 		SELECT user_id, date, consecutive_day, created_at
-		FROM checkins WHERE user_id = $1
+		FROM checkins ` + where + `
 		ORDER BY date DESC
-		LIMIT $2 OFFSET $3
-	`
-	rows, err := r.db.Query(ctx, query, userID, pageSize, (page-1)*pageSize)
+		LIMIT $` + string(rune('0'+argIdx)) + ` OFFSET $` + string(rune('0'+argIdx+1))
+	args = append(args, pageSize, (page-1)*pageSize)
+
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, 0, err
 	}

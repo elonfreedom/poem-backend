@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 )
 
 type UserRepository struct {
@@ -85,4 +85,61 @@ func (r *UserRepository) UpdatePassword(ctx context.Context, userID, passwordHas
 	query := `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`
 	_, err := r.db.Exec(ctx, query, passwordHash, userID)
 	return err
+}
+
+// UpdateStatus 更新用户状态
+func (r *UserRepository) UpdateStatus(ctx context.Context, userID string, status string) error {
+	query := `UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.db.Exec(ctx, query, status, userID)
+	return err
+}
+
+// ListUsers 获取前端用户列表（role=user）
+func (r *UserRepository) ListUsers(ctx context.Context, page, pageSize int, keyword, statusFilter string) ([]usermodel.User, int64, error) {
+	where := "WHERE role = 'user'"
+	args := []interface{}{}
+	argIdx := 1
+
+	if keyword != "" {
+		where += " AND (nickname ILIKE $" + string(rune('0'+argIdx)) + " OR email ILIKE $" + string(rune('0'+argIdx)) + ")"
+		args = append(args, "%"+keyword+"%")
+		argIdx++
+	}
+	if statusFilter != "" {
+		where += " AND status = $" + string(rune('0'+argIdx))
+		args = append(args, statusFilter)
+		argIdx++
+	}
+
+	// 获取总数
+	countQuery := "SELECT COUNT(*) FROM users " + where
+	var total int64
+	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	// 获取列表
+	query := `
+		SELECT id, nickname, email, role, status, created_at, updated_at
+		FROM users ` + where + `
+		ORDER BY created_at DESC
+		LIMIT $` + string(rune('0'+argIdx)) + ` OFFSET $` + string(rune('0'+argIdx+1))
+	args = append(args, pageSize, (page-1)*pageSize)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var users []usermodel.User
+	for rows.Next() {
+		var u usermodel.User
+		err := rows.Scan(&u.ID, &u.Nickname, &u.Email, &u.Role, &u.Status, &u.CreatedAt, &u.UpdatedAt)
+		if err != nil {
+			return nil, 0, err
+		}
+		users = append(users, u)
+	}
+	return users, total, rows.Err()
 }

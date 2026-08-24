@@ -12,6 +12,7 @@ type User struct {
 	Nickname     string                `json:"nickname" db:"nickname" description:"用户昵称"`
 	Email        *string               `json:"email,omitempty" db:"email" description:"邮箱地址（可选）"`
 	Role         string                `json:"role" db:"role" description:"用户角色: admin, user"`
+	Status       string                `json:"status" db:"status" description:"用户状态: active, disabled"`
 	PasswordHash *string               `json:"-" db:"password_hash" description:"密码哈希（后台登录用）"`
 	Credentials  []webauthn.Credential `json:"-" db:"-" description:"WebAuthn 凭证（不持久化）"`
 	CreatedAt    time.Time             `json:"created_at" db:"created_at" description:"创建时间"`
@@ -24,6 +25,7 @@ type UserResponse struct {
 	Nickname  string    `json:"nickname" description:"用户昵称"`
 	Email     string    `json:"email,omitempty" description:"邮箱地址（脱敏显示）"`
 	Role      string    `json:"role" description:"用户角色: admin, user"`
+	Status    string    `json:"status" description:"用户状态: active, disabled"`
 	CreatedAt time.Time `json:"created_at" description:"创建时间"`
 }
 
@@ -49,6 +51,7 @@ func (u *User) ToResponse() UserResponse {
 		ID:        u.ID,
 		Nickname:  u.Nickname,
 		Role:      u.Role,
+		Status:    u.Status,
 		CreatedAt: u.CreatedAt,
 	}
 	if u.Email != nil {

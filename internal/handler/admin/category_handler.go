@@ -66,6 +66,15 @@ func (h *CategoryHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[a
 		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "分类ID必须是数字"}
 	}
 
+	// 检查是否有关联诗歌
+	count, err := h.categoryService.GetPoemCount(c.Context(), id)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "check failed", Detail: err.Error()}
+	}
+	if count > 0 {
+		return nil, fuego.ConflictError{Title: "conflict", Detail: "该分类下还有诗歌，无法删除"}
+	}
+
 	if err := h.categoryService.Delete(c.Context(), id); err != nil {
 		return nil, fuego.InternalServerError{Title: "delete failed", Detail: err.Error()}
 	}

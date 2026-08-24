@@ -7,6 +7,7 @@ type CheckIn struct {
 	UserID         string    `json:"user_id" db:"user_id" description:"用户ID (UUID v7)"`
 	Date           time.Time `json:"date" db:"date" description:"打卡日期"`
 	ConsecutiveDay int       `json:"consecutive_day" db:"consecutive_day" description:"连续打卡天数"`
+	PoemID         *int64    `json:"poem_id" db:"poem_id" description:"关联诗歌ID"`
 	CreatedAt      time.Time `json:"created_at" db:"created_at" description:"创建时间"`
 }
 

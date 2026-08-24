@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
@@ -54,10 +54,10 @@ func (s *FavoriteService) ListFavorites(ctx context.Context, userID string, page
 		}
 		list = append(list, usermodel.FavoriteResponse{
 			Poem: usermodel.PoemListItem{
-				ID:    poem.ID,
-				Title: poem.Title,
-				Author: poem.Author,
-				Dynasty: poem.Dynasty,
+				ID:       poem.ID,
+				Title:    poem.Title,
+				Author:   poem.Author,
+				Dynasty:  poem.Dynasty,
 				CoverURL: poem.CoverURL,
 			},
 			CreatedAt: f.CreatedAt,

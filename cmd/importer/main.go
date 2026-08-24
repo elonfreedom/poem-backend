@@ -170,7 +170,7 @@ func downloadJSON(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
@@ -198,7 +198,7 @@ func insertPoems(ctx context.Context, db *pgxpool.Pool, poems []TangPoem, dynast
 	}
 
 	br := db.SendBatch(ctx, batch)
-	defer br.Close()
+	defer func() { _ = br.Close() }()
 
 	count := 0
 	for i := 0; i < len(poems); i++ {
@@ -232,7 +232,7 @@ func insertCiPoems(ctx context.Context, db *pgxpool.Pool, poems []CiPoem) (int, 
 	}
 
 	br := db.SendBatch(ctx, batch)
-	defer br.Close()
+	defer func() { _ = br.Close() }()
 
 	count := 0
 	for i := 0; i < len(poems); i++ {

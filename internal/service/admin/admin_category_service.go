@@ -75,6 +75,11 @@ func (s *AdminCategoryService) Update(ctx context.Context, id int64, req *adminm
 	return s.categoryRepo.Update(ctx, category)
 }
 
+// GetPoemCount 获取分类下的诗歌数量
+func (s *AdminCategoryService) GetPoemCount(ctx context.Context, categoryID int64) (int, error) {
+	return s.categoryRepo.GetPoemCount(ctx, categoryID)
+}
+
 // Delete 删除分类
 func (s *AdminCategoryService) Delete(ctx context.Context, id int64) error {
 	return s.categoryRepo.Delete(ctx, id)

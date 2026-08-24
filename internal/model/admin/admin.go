@@ -31,12 +31,12 @@ type AdminUserResponse struct {
 
 // AdminUserInfoResponse 用户信息响应（适配 vben-admin /user/info）
 type AdminUserInfoResponse struct {
-	UserId   string         `json:"userId" description:"用户ID"`
-	Username string         `json:"username" description:"用户名"`
-	RealName string         `json:"realName" description:"真实姓名"`
-	Avatar   string         `json:"avatar" description:"头像"`
-	Desc     string         `json:"desc" description:"描述/角色"`
-	HomePath string         `json:"homePath" description:"首页路径"`
+	UserId   string          `json:"userId" description:"用户ID"`
+	Username string          `json:"username" description:"用户名"`
+	RealName string          `json:"realName" description:"真实姓名"`
+	Avatar   string          `json:"avatar" description:"头像"`
+	Desc     string          `json:"desc" description:"描述/角色"`
+	HomePath string          `json:"homePath" description:"首页路径"`
 	Roles    []AdminRoleInfo `json:"roles" description:"角色列表"`
 }
 
@@ -147,11 +147,11 @@ type AdminTagCreateRequest struct {
 
 // AdminStatsOverview 总览统计
 type AdminStatsOverview struct {
-	TotalUsers    int64 `json:"total_users" description:"用户总数"`
-	TotalPoems    int64 `json:"total_poems" description:"诗歌总数"`
-	TotalViews    int64 `json:"total_views" description:"总浏览量"`
-	TodayActive   int64 `json:"today_active" description:"今日活跃"`
-	TodayCheckin  int64 `json:"today_checkin" description:"今日打卡"`
+	TotalUsers   int64 `json:"total_users" description:"用户总数"`
+	TotalPoems   int64 `json:"total_poems" description:"诗歌总数"`
+	TotalViews   int64 `json:"total_views" description:"总浏览量"`
+	TodayActive  int64 `json:"today_active" description:"今日活跃"`
+	TodayCheckin int64 `json:"today_checkin" description:"今日打卡"`
 }
 
 // AdminStatsDaily 每日统计

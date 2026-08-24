@@ -6,6 +6,7 @@ import "time"
 type ReadingPlan struct {
 	UserID     string    `json:"user_id" db:"user_id" description:"用户ID (UUID v7)"`
 	PlanID     int       `json:"plan_id" db:"plan_id" description:"计划ID（用户级自增）"`
+	Title      string    `json:"title" db:"title" description:"计划标题"`
 	DailyCount int       `json:"daily_count" db:"daily_count" description:"每日阅读数量"`
 	StartDate  time.Time `json:"start_date" db:"start_date" description:"开始日期"`
 	EndDate    time.Time `json:"end_date" db:"end_date" description:"结束日期"`
@@ -25,13 +26,16 @@ type ReadingProgress struct {
 
 // CreatePlanRequest 创建计划请求
 type CreatePlanRequest struct {
-	DailyCount int `json:"daily_count" validate:"required,min=1,max=50" description:"每日阅读数量（1-50）"`
-	Duration   int `json:"duration" validate:"required,oneof=7 14 30 90" description:"计划天数（7/14/30/90）"`
+	Title      string `json:"title" description:"计划标题"`
+	DailyCount int    `json:"daily_count" validate:"required,min=1,max=50" description:"每日阅读数量（1-50）"`
+	Duration   int    `json:"duration" validate:"required,oneof=7 14 30 90" description:"计划天数（7/14/30/90）"`
+	StartDate  string `json:"start_date" description:"开始日期（YYYY-MM-DD，可选，默认今天）"`
 }
 
 // CreatePlanResponse 创建计划响应
 type CreatePlanResponse struct {
 	PlanID     int       `json:"plan_id" description:"计划ID"`
+	Title      string    `json:"title" description:"计划标题"`
 	DailyCount int       `json:"daily_count" description:"每日阅读数量"`
 	StartDate  time.Time `json:"start_date" description:"开始日期"`
 	EndDate    time.Time `json:"end_date" description:"结束日期"`

@@ -28,6 +28,7 @@ func LoggerMiddleware(next http.Handler) http.Handler {
 		rw := newResponseWriter(w)
 		next.ServeHTTP(rw, r)
 
+		//nolint:gosec // G706: RequestURI 仅用于日志，不写入外部系统
 		log.Printf(
 			"%s %s %d %s",
 			r.Method,

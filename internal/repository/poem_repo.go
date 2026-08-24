@@ -32,7 +32,7 @@ func (r *PoemRepository) Create(ctx context.Context, poem *model.Poem) error {
 }
 
 // List 获取诗歌列表
-func (r *PoemRepository) List(ctx context.Context, page, pageSize int, categoryID *int64, status string) ([]model.Poem, int64, error) {
+func (r *PoemRepository) List(ctx context.Context, page, pageSize int, categoryID *int64, status string, dynasty string) ([]model.Poem, int64, error) {
 	where := "WHERE status = 'published'"
 	args := []interface{}{}
 	argIdx := 1
@@ -45,6 +45,11 @@ func (r *PoemRepository) List(ctx context.Context, page, pageSize int, categoryI
 	if status != "" {
 		where += " AND status = $" + string(rune('0'+argIdx))
 		args = append(args, status)
+		argIdx++
+	}
+	if dynasty != "" {
+		where += " AND dynasty = $" + string(rune('0'+argIdx))
+		args = append(args, dynasty)
 		argIdx++
 	}
 

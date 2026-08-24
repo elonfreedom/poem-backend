@@ -6,7 +6,7 @@ import (
 	"github.com/go-fuego/fuego"
 
 	"poem-backend/internal/middleware"
-usermodel "poem-backend/internal/model/user"
+	usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 )
 

@@ -22,6 +22,10 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	announcementRepo := repository.NewAnnouncementRepository(db)
 	configRepo := repository.NewConfigRepository(db)
 	statsRepo := repository.NewStatsRepository(db)
+	checkinRepo := repository.NewCheckinRepository(db)
+	favoriteRepo := repository.NewFavoriteRepository(db)
+	readingPlanRepo := repository.NewReadingPlanRepository(db)
+	passkeyRepo := repository.NewPasskeyRepository(db)
 
 	// 初始化 Service
 	adminAuthService := adminservice.NewAdminAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpireHour)
@@ -32,6 +36,7 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	adminBannerService := adminservice.NewAdminBannerService(bannerRepo)
 	adminAnnouncementService := adminservice.NewAdminAnnouncementService(announcementRepo)
 	adminConfigService := adminservice.NewAdminConfigService(configRepo)
+	adminUserService := adminservice.NewAdminUserService(userRepo, checkinRepo, favoriteRepo, readingPlanRepo, passkeyRepo)
 
 	// 初始化 Handler
 	authHandler := admin.NewAuthHandler(adminAuthService)
@@ -42,6 +47,7 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	bannerHandler := admin.NewBannerHandler(adminBannerService)
 	announcementHandler := admin.NewAnnouncementHandler(adminAnnouncementService)
 	configHandler := admin.NewConfigHandler(adminConfigService)
+	userHandler := admin.NewUserHandler(adminUserService)
 
 	// ========== 后台管理路由组（端口 8081，全部以 /api/admin 开头）==========
 	adminGroup := fuego.Group(server, "/api/admin")
@@ -243,5 +249,22 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionSummary("更新配置"),
 		fuego.OptionOverrideDescription("更新系统配置"),
 		fuego.OptionTags("系统配置"),
+	)
+
+	// [用户管理] 前端 App 用户
+	fuego.Get(adminMgmt, "/users", userHandler.List,
+		fuego.OptionSummary("获取用户列表"),
+		fuego.OptionOverrideDescription("分页获取前端用户列表，支持搜索和状态筛选"),
+		fuego.OptionTags("用户管理"),
+	)
+	fuego.Get(adminMgmt, "/users/{id}", userHandler.GetByID,
+		fuego.OptionSummary("获取用户详情"),
+		fuego.OptionOverrideDescription("获取用户详情（含统计数据）"),
+		fuego.OptionTags("用户管理"),
+	)
+	fuego.Put(adminMgmt, "/users/{id}/status", userHandler.UpdateStatus,
+		fuego.OptionSummary("更新用户状态"),
+		fuego.OptionOverrideDescription("禁用或启用用户账号"),
+		fuego.OptionTags("用户管理"),
 	)
 }

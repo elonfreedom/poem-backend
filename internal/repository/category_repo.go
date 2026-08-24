@@ -74,6 +74,14 @@ func (r *CategoryRepository) Update(ctx context.Context, category *model.Categor
 	return err
 }
 
+// GetPoemCount 获取分类下的诗歌数量
+func (r *CategoryRepository) GetPoemCount(ctx context.Context, categoryID int64) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM poems WHERE category_id = $1`
+	err := r.db.QueryRow(ctx, query, categoryID).Scan(&count)
+	return count, err
+}
+
 // Delete 删除分类
 func (r *CategoryRepository) Delete(ctx context.Context, id int64) error {
 	_, err := r.db.Exec(ctx, "DELETE FROM categories WHERE id = $1", id)
