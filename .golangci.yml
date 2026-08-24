@@ -1,0 +1,70 @@
+version: "2"
+run:
+  timeout: 3m
+  go: "1.26"
+  modules-download-mode: readonly
+
+output:
+  format: colored-line-number
+  sort-results: true
+
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - poem-backend
+
+linters:
+  disable-all: true
+  enable:
+    # 官方静态分析（必开）
+    - govet
+    # 高级静态分析（推荐必开）
+    - staticcheck
+    # 代码风格/性能建议
+    - gocritic
+    # 未检查的 error
+    - errcheck
+    # 未使用的代码
+    - unused
+    # 未使用的 struct field
+    - ineffassign
+    # 拼写检查
+    - misspell
+    # 冗余代码
+    - unconvert
+    # 安全问题
+    - gosec
+
+linters-settings:
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - hugeParam
+      - rangeValCopy
+  gosec:
+    excludes:
+      - G404 # weak random number generator (开发环境常用)
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 50
+  max-same-issues: 10
+  exclude-rules:
+    # 测试文件放宽限制
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+    # 生成的文件跳过
+    - path: doc/
+      linters:
+        - misspell

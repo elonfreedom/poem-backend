@@ -40,7 +40,7 @@ func NewAuthService(
 }
 
 // BeginRegistration 开始注册
-func (s *AuthService) BeginRegistration(ctx context.Context, deviceName string) (*protocol.CredentialCreation, *webauthn.SessionData, string, error) {
+func (s *AuthService) BeginRegistration(ctx context.Context, deviceName string) (*protocol.CredentialCreation, *webauthn.SessionData, string, string, error) {
 	// 生成 UUID v7 用户 ID
 	userID := uuid.New().String()
 	nickname := generateNickname()
@@ -55,16 +55,19 @@ func (s *AuthService) BeginRegistration(ctx context.Context, deviceName string) 
 
 	// 创建用户
 	if err := s.userRepo.Create(ctx, user); err != nil {
-		return nil, nil, "", fmt.Errorf("failed to create user: %w", err)
+		return nil, nil, "", "", fmt.Errorf("failed to create user: %w", err)
 	}
 
 	// 开始 WebAuthn 注册
 	options, session, err := s.webauthn.BeginRegistration(user)
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("failed to begin registration: %w", err)
+		return nil, nil, "", "", fmt.Errorf("failed to begin registration: %w", err)
 	}
 
-	return options, session, user.ID, nil
+	// 生成会话 ID
+	sessionID := uuid.New().String()
+
+	return options, session, user.ID, sessionID, nil
 }
 
 // FinishRegistration 完成注册
@@ -107,14 +110,17 @@ func (s *AuthService) FinishRegistration(ctx context.Context, userID string, ses
 }
 
 // BeginLogin 开始登录
-func (s *AuthService) BeginLogin(ctx context.Context) (*protocol.CredentialAssertion, *webauthn.SessionData, error) {
+func (s *AuthService) BeginLogin(ctx context.Context) (*protocol.CredentialAssertion, *webauthn.SessionData, string, error) {
 	// 发现式登录（无需用户名）
 	options, session, err := s.webauthn.BeginDiscoverableLogin()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to begin login: %w", err)
+		return nil, nil, "", fmt.Errorf("failed to begin login: %w", err)
 	}
 
-	return options, session, nil
+	// 生成会话 ID
+	sessionID := uuid.New().String()
+
+	return options, session, sessionID, nil
 }
 
 // FinishLogin 完成登录
