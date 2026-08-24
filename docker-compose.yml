@@ -1,0 +1,49 @@
+# ============================================
+# 诗歌应用 - Docker Compose 部署配置
+# ============================================
+# 注意：反向代理使用宿主机已有的 Caddy，不在此编排中
+#
+# 启动: docker compose up -d
+# 停止: docker compose down
+# 日志: docker compose logs -f backend
+
+services:
+  # ---------- 后端 API（用户端 :8082 → 内部 :8080） ----------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poem-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # 覆盖 DB_HOST 为宿主机地址（容器内访问宿主机 PostgreSQL）
+      DB_HOST: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8082:8080"   # 用户端 API（宿主机 8082 → 容器 8080）
+      - "8083:8081"   # 管理端 API（宿主机 8083 → 容器 8081）
+    networks:
+      - poem-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------- 前端（用户端，可选） ----------
+  # 如果前端也走 Caddy 反代，取消下面注释
+  # frontend:
+  #   image: nginx:alpine
+  #   container_name: poem-frontend
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./frontend/dist:/usr/share/nginx/html:ro
+  #   networks:
+  #     - poem-net
+
+networks:
+  poem-net:
+    driver: bridge

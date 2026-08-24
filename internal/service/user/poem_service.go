@@ -2,7 +2,11 @@ package user
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+
+	"github.com/go-fuego/fuego"
 
 	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
@@ -100,6 +104,9 @@ func (s *PoemService) Search(ctx context.Context, keyword string, page, pageSize
 func (s *PoemService) GetDailyRecommendation(ctx context.Context) (*usermodel.PoemResponse, error) {
 	poem, err := s.poemRepo.GetDailyRecommendation(ctx)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "暂无诗歌", Detail: "请先通过管理后台导入诗歌数据"}
+		}
 		return nil, fmt.Errorf("failed to get daily recommendation: %w", err)
 	}
 

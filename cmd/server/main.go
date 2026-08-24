@@ -117,6 +117,10 @@ func main() {
 		fuego.WithErrorSerializer(standardErrorSerializer),
 	)
 	router.SetupUserRoutes(userServer, db, cfg)
+	// 健康检查（用户端）
+	fuego.Get(userServer, "/health", func(c fuego.ContextNoBody) (map[string]string, error) {
+		return map[string]string{"status": "ok"}, nil
+	}, fuego.OptionSummary("健康检查"), fuego.OptionTags("系统"))
 
 	// 后台管理 API Server - :8081
 	adminServer := fuego.NewServer(
@@ -125,6 +129,10 @@ func main() {
 		fuego.WithErrorSerializer(vbenErrorSerializer),
 	)
 	router.SetupAdminRoutes(adminServer, db, cfg)
+	// 健康检查（管理端）
+	fuego.Get(adminServer, "/health", func(c fuego.ContextNoBody) (map[string]string, error) {
+		return map[string]string{"status": "ok"}, nil
+	}, fuego.OptionSummary("健康检查"), fuego.OptionTags("系统"))
 
 	// 启动两个服务
 	log.Printf("晓诗用户端 API 启动于 :8080，文档: http://localhost:8080/swagger")
