@@ -90,6 +90,7 @@ func (s *AuthService) FinishRegistration(ctx context.Context, userID string, ses
 		CredentialID: credential.ID,
 		PublicKey:    credential.PublicKey,
 		SignCount:    credential.Authenticator.SignCount,
+		Flags:        credential.Flags.MsgpByte(),
 		DeviceName:   "Unknown Device", // 可以从请求中获取
 		CreatedAt:    time.Now(),
 	}
@@ -164,7 +165,28 @@ func (s *AuthService) FinishLogin(ctx context.Context, session webauthn.SessionD
 func (s *AuthService) findUserHandler(ctx context.Context) webauthn.DiscoverableUserHandler {
 	return func(rawID, userHandle []byte) (webauthn.User, error) {
 		userID := string(userHandle)
-		return s.userRepo.GetByID(ctx, userID)
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		passkeys, err := s.passkeyRepo.GetByUserID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		user.Credentials = make([]webauthn.Credential, 0, len(passkeys))
+		for _, pk := range passkeys {
+			flags := webauthn.CredentialFlagsFromMsgpByte(pk.Flags)
+			user.Credentials = append(user.Credentials, webauthn.Credential{
+				ID:              pk.CredentialID,
+				PublicKey:       pk.PublicKey,
+				AttestationType: "none",
+				Flags:           flags,
+				Authenticator: webauthn.Authenticator{
+					SignCount: pk.SignCount,
+				},
+			})
+		}
+		return user, nil
 	}
 }
 
@@ -219,6 +241,7 @@ func (s *AuthService) FinishAddDevice(ctx context.Context, userID string, sessio
 		CredentialID: credential.ID,
 		PublicKey:    credential.PublicKey,
 		SignCount:    credential.Authenticator.SignCount,
+		Flags:        credential.Flags.MsgpByte(),
 		DeviceName:   deviceName,
 		CreatedAt:    time.Now(),
 	}

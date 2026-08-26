@@ -93,5 +93,5 @@ func (u *User) WebAuthnIcon() string {
 }
 
 func (u *User) WebAuthnCredentials() []webauthn.Credential {
-	return nil
+	return u.Credentials
 }

@@ -1,88 +1,112 @@
 package user
 
 import (
-	"sync"
+	"context"
 	"time"
+
+	"poem-backend/internal/repository"
 )
+
+// connectionTTL 连接有效期
+const connectionTTL = 10 * time.Minute
+
+// Connection 跨设备连接数据
+type Connection struct {
+	Token           string
+	UserID          string
+	DeviceName      string
+	Status          ConnectionStatus
+	WebAuthnSession any // webauthn.SessionData
+	WebAuthnOptions any // protocol.CredentialCreation
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+}
 
 // ConnectionStatus 连接状态
 type ConnectionStatus string
 
 const (
-	ConnectionStatusWaiting   ConnectionStatus = "waiting"   // 等待设备 B 连接
-	ConnectionStatusConnected ConnectionStatus = "connected" // 设备 B 已连接
-	ConnectionStatusConfirmed ConnectionStatus = "confirmed" // 设备 A 已确认
-	ConnectionStatusRejected  ConnectionStatus = "rejected"  // 设备 A 已拒绝
-	ConnectionStatusExpired   ConnectionStatus = "expired"   // 连接已过期
-	ConnectionStatusCompleted ConnectionStatus = "completed" // 注册完成
+	ConnectionStatusWaiting   ConnectionStatus = "waiting"
+	ConnectionStatusConnected ConnectionStatus = "connected"
+	ConnectionStatusConfirmed ConnectionStatus = "confirmed"
+	ConnectionStatusRejected  ConnectionStatus = "rejected"
+	ConnectionStatusExpired   ConnectionStatus = "expired"
+	ConnectionStatusCompleted ConnectionStatus = "completed"
 )
 
-// Connection 跨设备连接数据
-type Connection struct {
-	Token           string           // 连接令牌（UUID）
-	UserID          string           // 设备 A 的用户 ID
-	DeviceName      string           // 设备 B 的设备名称
-	Status          ConnectionStatus // 当前状态
-	WebAuthnSession any              // webauthn.SessionData（finish 时验证 credential）
-	WebAuthnOptions any              // protocol.CredentialCreation（设备 B 创建 credential 用）
-	CreatedAt       time.Time        // 创建时间
-	ExpiresAt       time.Time        // 过期时间
-}
-
-// ConnectionStore 线程安全的跨设备连接存储
+// ConnectionStore 跨设备连接存储（数据库持久化）
 type ConnectionStore struct {
-	mu          sync.RWMutex
-	connections map[string]*Connection
+	repo *repository.ConnectionRepository
 }
 
 // NewConnectionStore 创建新的连接存储
-func NewConnectionStore() *ConnectionStore {
-	return &ConnectionStore{
-		connections: make(map[string]*Connection),
-	}
+func NewConnectionStore(repo *repository.ConnectionRepository) *ConnectionStore {
+	return &ConnectionStore{repo: repo}
 }
 
 // Store 存储连接
 func (s *ConnectionStore) Store(token string, conn *Connection) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.connections[token] = conn
+	_ = s.repo.Store(context.Background(), &repository.Connection{
+		Token:      token,
+		UserID:     conn.UserID,
+		DeviceName: conn.DeviceName,
+		Status:     string(conn.Status),
+		Session:    conn.WebAuthnSession,
+		Options:    conn.WebAuthnOptions,
+		ExpiresAt:  conn.ExpiresAt,
+	})
 }
 
 // Get 获取连接
 func (s *ConnectionStore) Get(token string) (*Connection, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	conn, ok := s.connections[token]
-	return conn, ok
+	conn, ok, err := s.repo.Get(context.Background(), token)
+	if err != nil || !ok {
+		return nil, false
+	}
+	return &Connection{
+		Token:           conn.Token,
+		UserID:          conn.UserID,
+		DeviceName:      conn.DeviceName,
+		Status:          ConnectionStatus(conn.Status),
+		WebAuthnSession: conn.Session,
+		WebAuthnOptions: conn.Options,
+		ExpiresAt:       conn.ExpiresAt,
+	}, true
 }
 
 // Update 更新连接
 func (s *ConnectionStore) Update(token string, updater func(*Connection)) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if conn, ok := s.connections[token]; ok {
-		updater(conn)
-		return true
+	conn, ok := s.Get(token)
+	if !ok {
+		return false
 	}
-	return false
+	updater(conn)
+	s.Store(token, conn)
+	return true
 }
 
 // Delete 删除连接
 func (s *ConnectionStore) Delete(token string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.connections, token)
+	_ = s.repo.Delete(context.Background(), token)
 }
 
 // CleanupExpired 清理过期连接
 func (s *ConnectionStore) CleanupExpired() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
-	for token, conn := range s.connections {
-		if now.After(conn.ExpiresAt) {
-			delete(s.connections, token)
+	_, _ = s.repo.CleanupExpired(context.Background())
+}
+
+// StartCleanup 启动定期清理
+func (s *ConnectionStore) StartCleanup(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				_, _ = s.repo.CleanupExpired(ctx)
+			}
 		}
-	}
+	}()
 }

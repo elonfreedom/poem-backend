@@ -1,0 +1,48 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+doc/
+README.md
+CLAUDE.md
+rules/
+
+# Local env files
+.env
+.env.example
+.env.production
+
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test
+*_test.go
+coverage.txt
+.coverage
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Misc
+*.tar.gz
+*.log
+Makefile

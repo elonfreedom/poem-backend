@@ -33,3 +33,5 @@ Thumbs.db
 # Logs
 *.log
 doc/openapi.json
+server
+manifest.json

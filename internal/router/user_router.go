@@ -1,6 +1,9 @@
 package router
 
 import (
+	"context"
+	"time"
+
 	"github.com/go-fuego/fuego"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,6 +37,8 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 	// 初始化 Repository
 	userRepo := repository.NewUserRepository(db)
 	passkeyRepo := repository.NewPasskeyRepository(db)
+	sessionRepo := repository.NewSessionRepository(db)
+	connectionRepo := repository.NewConnectionRepository(db)
 	poemRepo := repository.NewPoemRepository(db)
 	favoriteRepo := repository.NewFavoriteRepository(db)
 	readingPlanRepo := repository.NewReadingPlanRepository(db)
@@ -48,7 +53,7 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 	checkinService := userservice.NewCheckinService(checkinRepo)
 
 	// 初始化 Handler
-	authHandler := user.NewAuthHandler(authService)
+	authHandler := user.NewAuthHandler(authService, sessionRepo, connectionRepo)
 	userHandler := user.NewUserHandler(userService)
 	poemHandler := user.NewPoemHandler(poemService)
 	favoriteHandler := user.NewFavoriteHandler(favoriteService)
@@ -62,6 +67,10 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config) {
 	authHandler, userHandler, poemHandler, favoriteHandler, readingPlanHandler, checkinHandler :=
 		initUserDependencies(server, db, cfg)
+
+	// 启动定期清理过期 session（每 5 分钟）
+	authHandler.SessionStore.StartCleanup(context.Background(), 5*time.Minute)
+	authHandler.ConnectionStore.StartCleanup(context.Background(), 5*time.Minute)
 
 	// ========== 公开路由：Passkey 认证 ==========
 	public := fuego.Group(server, "/api/public")

@@ -9,6 +9,7 @@ type Passkey struct {
 	CredentialID []byte     `json:"-" db:"credential_id" description:"凭证ID（二进制）"`
 	PublicKey    []byte     `json:"-" db:"public_key" description:"公钥"`
 	SignCount    uint32     `json:"sign_count" db:"sign_count" description:"签名计数器"`
+	Flags        byte       `json:"-" db:"flags" description:"WebAuthn 凭证标志位（BackupEligible/BackupState等）"`
 	DeviceName   string     `json:"device_name" db:"device_name" description:"设备名称"`
 	CreatedAt    time.Time  `json:"created_at" db:"created_at" description:"创建时间"`
 	LastUsedAt   *time.Time `json:"last_used_at" db:"last_used_at" description:"最后使用时间"`

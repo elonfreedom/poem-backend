@@ -1,9 +1,9 @@
 package user
 
 import (
+	"bytes"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/go-fuego/fuego"
@@ -11,6 +11,7 @@ import (
 
 	"poem-backend/internal/middleware"
 	usermodel "poem-backend/internal/model/user"
+	"poem-backend/internal/repository"
 	userservice "poem-backend/internal/service/user"
 )
 
@@ -20,54 +21,25 @@ type SessionData struct {
 	UserID  string // 仅注册流程使用
 }
 
-// SessionStore 线程安全的 WebAuthn 会话存储
-type SessionStore struct {
-	mu       sync.RWMutex
-	sessions map[string]SessionData
-}
-
-// NewSessionStore 创建新的会话存储
-func NewSessionStore() *SessionStore {
-	return &SessionStore{
-		sessions: make(map[string]SessionData),
-	}
-}
-
-// Store 存储会话
-func (s *SessionStore) Store(id string, data SessionData) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sessions[id] = data
-}
-
-// Get 获取会话
-func (s *SessionStore) Get(id string) (SessionData, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	data, ok := s.sessions[id]
-	return data, ok
-}
-
-// Delete 删除会话
-func (s *SessionStore) Delete(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.sessions, id)
-}
-
 // AuthHandler 认证处理器
 type AuthHandler struct {
-	authService     *userservice.AuthService
-	sessionStore    *SessionStore
-	connectionStore *ConnectionStore
+	AuthService     *userservice.AuthService
+	SessionStore    *SessionStore
+	ConnectionStore *ConnectionStore
 }
 
 // NewAuthHandler 创建认证处理器
-func NewAuthHandler(authService *userservice.AuthService) *AuthHandler {
+func NewAuthHandler(
+	authService *userservice.AuthService,
+	sessionRepo *repository.SessionRepository,
+	connectionRepo *repository.ConnectionRepository,
+) *AuthHandler {
+	store := NewSessionStore(sessionRepo)
+	connStore := NewConnectionStore(connectionRepo)
 	return &AuthHandler{
-		authService:     authService,
-		sessionStore:    NewSessionStore(),
-		connectionStore: NewConnectionStore(),
+		AuthService:     authService,
+		SessionStore:    store,
+		ConnectionStore: connStore,
 	}
 }
 
@@ -91,13 +63,13 @@ func (h *AuthHandler) BeginRegistration(c fuego.ContextWithBody[BeginRegistratio
 		return nil, err
 	}
 
-	options, session, userID, sessionID, err := h.authService.BeginRegistration(c.Context(), body.DeviceName)
+	options, session, userID, sessionID, err := h.AuthService.BeginRegistration(c.Context(), body.DeviceName)
 	if err != nil {
 		return nil, err
 	}
 
 	// 存储会话数据
-	h.sessionStore.Store(sessionID, SessionData{
+	h.SessionStore.Store(sessionID, SessionData{
 		Session: *session,
 		UserID:  userID,
 	})
@@ -121,13 +93,13 @@ func (h *AuthHandler) FinishRegistration(c fuego.ContextNoBody) (*usermodel.Logi
 	}
 
 	// 获取会话数据
-	sessionData, ok := h.sessionStore.Get(sessionID)
+	sessionData, ok := h.SessionStore.Get(sessionID)
 	if !ok {
 		return nil, fuego.BadRequestError{Title: "invalid session", Detail: "会话不存在或已过期"}
 	}
 
 	// 删除会话（一次性使用）
-	h.sessionStore.Delete(sessionID)
+	h.SessionStore.Delete(sessionID)
 
 	// 使用原始请求体直接传递给 WebAuthn 库
 	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", io.NopCloser(c.Request().Body))
@@ -137,7 +109,7 @@ func (h *AuthHandler) FinishRegistration(c fuego.ContextNoBody) (*usermodel.Logi
 	req.Header.Set("Content-Type", "application/json")
 
 	// 调用服务完成注册
-	return h.authService.FinishRegistration(c.Context(), sessionData.UserID, sessionData.Session, req)
+	return h.AuthService.FinishRegistration(c.Context(), sessionData.UserID, sessionData.Session, req)
 }
 
 // BeginLoginResponse 开始登录响应
@@ -149,13 +121,13 @@ type BeginLoginResponse struct {
 
 // BeginLogin 开始登录（无需请求体）
 func (h *AuthHandler) BeginLogin(c fuego.ContextNoBody) (*BeginLoginResponse, error) {
-	options, session, sessionID, err := h.authService.BeginLogin(c.Context())
+	options, session, sessionID, err := h.AuthService.BeginLogin(c.Context())
 	if err != nil {
 		return nil, err
 	}
 
 	// 存储会话数据
-	h.sessionStore.Store(sessionID, SessionData{
+	h.SessionStore.Store(sessionID, SessionData{
 		Session: *session,
 	})
 
@@ -177,23 +149,37 @@ func (h *AuthHandler) FinishLogin(c fuego.ContextNoBody) (*usermodel.LoginRespon
 	}
 
 	// 获取会话数据
-	sessionData, ok := h.sessionStore.Get(sessionID)
+	sessionData, ok := h.SessionStore.Get(sessionID)
 	if !ok {
 		return nil, fuego.BadRequestError{Title: "invalid session", Detail: "会话不存在或已过期"}
 	}
 
 	// 删除会话（一次性使用）
-	h.sessionStore.Delete(sessionID)
+	h.SessionStore.Delete(sessionID)
 
-	// 使用原始请求体直接传递给 WebAuthn 库
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", io.NopCloser(c.Request().Body))
+	// 读取原始请求体
+	bodyBytes, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "failed to read body", Detail: err.Error()}
+	}
+	c.Request().Body.Close()
+
+	// 使用读取到的 body 创建新的请求
+	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", io.NopCloser(bytes.NewReader(bodyBytes)))
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "failed to create request", Detail: err.Error()}
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	// 调用服务完成登录
-	return h.authService.FinishLogin(c.Context(), sessionData.Session, req)
+	return h.AuthService.FinishLogin(c.Context(), sessionData.Session, req)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // ==================== 跨设备 Passkey ====================
@@ -224,13 +210,13 @@ func (h *AuthHandler) AddDeviceBegin(c fuego.ContextWithBody[AddDeviceBeginReque
 	}
 
 	// 调用服务生成连接令牌、WebAuthn 选项和会话
-	token, options, session, expiresAt, err := h.authService.BeginAddDevice(c.Context(), userID, body.DeviceName)
+	token, options, session, expiresAt, err := h.AuthService.BeginAddDevice(c.Context(), userID, body.DeviceName)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "failed to begin add device", Detail: err.Error()}
 	}
 
 	// 存储连接状态、会话和注册选项
-	h.connectionStore.Store(token, &Connection{
+	h.ConnectionStore.Store(token, &Connection{
 		Token:           token,
 		UserID:          userID,
 		Status:          ConnectionStatusWaiting,
@@ -265,7 +251,7 @@ func (h *AuthHandler) AddDeviceStatus(c fuego.ContextNoBody) (*AddDeviceStatusRe
 		return nil, fuego.BadRequestError{Title: "missing token", Detail: "token 参数必填"}
 	}
 
-	conn, ok := h.connectionStore.Get(token)
+	conn, ok := h.ConnectionStore.Get(token)
 	if !ok {
 		return &AddDeviceStatusResponse{Status: string(ConnectionStatusExpired)}, nil
 	}
@@ -298,7 +284,7 @@ func (h *AuthHandler) AddDeviceStatusPublic(c fuego.ContextNoBody) (map[string]a
 		return nil, fuego.BadRequestError{Title: "missing token", Detail: "token 参数必填"}
 	}
 
-	conn, ok := h.connectionStore.Get(token)
+	conn, ok := h.ConnectionStore.Get(token)
 	status := ConnectionStatusExpired
 	if ok {
 		// 检查是否过期
@@ -338,7 +324,7 @@ func (h *AuthHandler) AddDeviceConnect(c fuego.ContextWithBody[AddDeviceConnectR
 		return nil, fuego.BadRequestError{Title: "missing token", Detail: "token 必填"}
 	}
 
-	conn, ok := h.connectionStore.Get(body.Token)
+	conn, ok := h.ConnectionStore.Get(body.Token)
 	if !ok {
 		return nil, fuego.BadRequestError{Title: "invalid token", Detail: "连接令牌无效或已过期"}
 	}
@@ -352,7 +338,7 @@ func (h *AuthHandler) AddDeviceConnect(c fuego.ContextWithBody[AddDeviceConnectR
 	}
 
 	// 更新连接状态为已连接
-	h.connectionStore.Update(body.Token, func(c *Connection) {
+	h.ConnectionStore.Update(body.Token, func(c *Connection) {
 		c.Status = ConnectionStatusConnected
 		c.DeviceName = body.DeviceName
 	})
@@ -387,7 +373,7 @@ func (h *AuthHandler) AddDeviceConfirm(c fuego.ContextWithBody[AddDeviceConfirmR
 		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
 	}
 
-	conn, ok := h.connectionStore.Get(body.Token)
+	conn, ok := h.ConnectionStore.Get(body.Token)
 	if !ok {
 		return nil, fuego.BadRequestError{Title: "invalid token", Detail: "连接令牌无效或已过期"}
 	}
@@ -401,14 +387,14 @@ func (h *AuthHandler) AddDeviceConfirm(c fuego.ContextWithBody[AddDeviceConfirmR
 	}
 
 	if body.Confirmed {
-		h.connectionStore.Update(body.Token, func(c *Connection) {
+		h.ConnectionStore.Update(body.Token, func(c *Connection) {
 			c.Status = ConnectionStatusConfirmed
 		})
 		return map[string]string{"status": "confirmed", "message": "已确认授权"}, nil
 	}
 
 	// 拒绝
-	h.connectionStore.Update(body.Token, func(c *Connection) {
+	h.ConnectionStore.Update(body.Token, func(c *Connection) {
 		c.Status = ConnectionStatusRejected
 	})
 	return map[string]string{"status": "rejected", "message": "已拒绝"}, nil
@@ -432,7 +418,7 @@ func (h *AuthHandler) AddDeviceFinish(c fuego.ContextWithBody[AddDeviceFinishReq
 		return nil, fuego.BadRequestError{Title: "missing token", Detail: "connection_token 必填"}
 	}
 
-	conn, ok := h.connectionStore.Get(body.Token)
+	conn, ok := h.ConnectionStore.Get(body.Token)
 	if !ok {
 		return nil, fuego.BadRequestError{Title: "invalid token", Detail: "连接令牌无效或已过期"}
 	}
@@ -460,13 +446,13 @@ func (h *AuthHandler) AddDeviceFinish(c fuego.ContextWithBody[AddDeviceFinishReq
 	req.Header.Set("Content-Type", "application/json")
 
 	// 完成注册，验证 credential 并保存 passkey
-	result, err := h.authService.FinishAddDevice(c.Context(), conn.UserID, session, req, body.DeviceName)
+	result, err := h.AuthService.FinishAddDevice(c.Context(), conn.UserID, session, req, body.DeviceName)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "failed to finish registration", Detail: err.Error()}
 	}
 
 	// 标记连接完成
-	h.connectionStore.Update(body.Token, func(c *Connection) {
+	h.ConnectionStore.Update(body.Token, func(c *Connection) {
 		c.Status = ConnectionStatusCompleted
 	})
 

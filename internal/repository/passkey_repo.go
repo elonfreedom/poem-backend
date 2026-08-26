@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"time"
+	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -20,29 +20,32 @@ func NewPasskeyRepository(db *pgxpool.Pool) *PasskeyRepository {
 // Create 创建 Passkey
 func (r *PasskeyRepository) Create(ctx context.Context, passkey *usermodel.Passkey) error {
 	query := `
-		INSERT INTO passkeys (user_id, credential_id, public_key, sign_count, device_name, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO passkeys (user_id, credential_id, public_key, sign_count, flags, device_name, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
 	`
 	err := r.db.QueryRow(ctx, query,
 		passkey.UserID, passkey.CredentialID, passkey.PublicKey,
-		passkey.SignCount, passkey.DeviceName, passkey.CreatedAt).Scan(&passkey.ID)
+		passkey.SignCount, passkey.Flags, passkey.DeviceName, passkey.CreatedAt).Scan(&passkey.ID)
 	return err
 }
 
 // GetByCredentialID 根据凭证 ID 获取 Passkey
 func (r *PasskeyRepository) GetByCredentialID(ctx context.Context, credentialID []byte) (*usermodel.Passkey, error) {
 	query := `
-		SELECT id, user_id, credential_id, public_key, sign_count, device_name, created_at, last_used_at
+		SELECT id, user_id, credential_id, public_key, sign_count, flags, device_name, created_at, last_used_at
 		FROM passkeys WHERE credential_id = $1
 	`
 	row := r.db.QueryRow(ctx, query, credentialID)
 	var p usermodel.Passkey
-	var lastUsedAt *time.Time
+	var lastUsedAt sql.NullTime
 	err := row.Scan(&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey,
-		&p.SignCount, &p.DeviceName, &p.CreatedAt, lastUsedAt)
+		&p.SignCount, &p.Flags, &p.DeviceName, &p.CreatedAt, &lastUsedAt)
 	if err != nil {
 		return nil, err
+	}
+	if lastUsedAt.Valid {
+		p.LastUsedAt = &lastUsedAt.Time
 	}
 	return &p, nil
 }
@@ -50,7 +53,7 @@ func (r *PasskeyRepository) GetByCredentialID(ctx context.Context, credentialID 
 // GetByUserID 获取用户的所有 Passkey
 func (r *PasskeyRepository) GetByUserID(ctx context.Context, userID string) ([]usermodel.Passkey, error) {
 	query := `
-		SELECT id, user_id, credential_id, public_key, sign_count, device_name, created_at, last_used_at
+		SELECT id, user_id, credential_id, public_key, sign_count, flags, device_name, created_at, last_used_at
 		FROM passkeys WHERE user_id = $1 ORDER BY created_at
 	`
 	rows, err := r.db.Query(ctx, query, userID)
@@ -62,10 +65,14 @@ func (r *PasskeyRepository) GetByUserID(ctx context.Context, userID string) ([]u
 	var passkeys []usermodel.Passkey
 	for rows.Next() {
 		var p usermodel.Passkey
+		var lastUsedAt sql.NullTime
 		err := rows.Scan(&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey,
-			&p.SignCount, &p.DeviceName, &p.CreatedAt, &p.LastUsedAt)
+			&p.SignCount, &p.Flags, &p.DeviceName, &p.CreatedAt, &lastUsedAt)
 		if err != nil {
 			return nil, err
+		}
+		if lastUsedAt.Valid {
+			p.LastUsedAt = &lastUsedAt.Time
 		}
 		passkeys = append(passkeys, p)
 	}
