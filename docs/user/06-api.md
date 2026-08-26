@@ -47,7 +47,6 @@
 | GET | /api/user/poems | 诗歌列表（支持分类筛选、分页） |
 | GET | /api/user/poems/:id | 诗歌详情 |
 | GET | /api/user/poems/search | 搜索诗歌 |
-| GET | /api/user/poems/daily | 每日推荐 |
 | GET | /api/user/categories | 分类列表 |
 
 ### 收藏

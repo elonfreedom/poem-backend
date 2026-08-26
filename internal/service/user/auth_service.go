@@ -173,3 +173,67 @@ func generateNickname() string {
 	// 简单实现：诗友 + 4 位随机数字
 	return fmt.Sprintf("诗友%04d", time.Now().UnixNano()%10000)
 }
+
+// ==================== 跨设备 Passkey ====================
+
+// BeginAddDevice 开始添加新设备
+// 返回：连接令牌、WebAuthn 注册选项、会话数据、过期时间
+func (s *AuthService) BeginAddDevice(ctx context.Context, userID string, deviceName string) (string, *protocol.CredentialCreation, *webauthn.SessionData, time.Time, error) {
+	// 获取用户
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return "", nil, nil, time.Time{}, fmt.Errorf("user not found: %w", err)
+	}
+
+	// 开始 WebAuthn 注册（为现有用户添加新 credential）
+	options, session, err := s.webauthn.BeginRegistration(user)
+	if err != nil {
+		return "", nil, nil, time.Time{}, fmt.Errorf("failed to begin registration: %w", err)
+	}
+
+	// 生成连接令牌（10分钟有效）
+	token := uuid.New().String()
+	expiresAt := time.Now().Add(10 * time.Minute)
+
+	return token, options, session, expiresAt, nil
+}
+
+// FinishAddDevice 完成新设备注册
+// 使用 WebAuthn 库验证 credential 并提取公钥
+func (s *AuthService) FinishAddDevice(ctx context.Context, userID string, session webauthn.SessionData, r *http.Request, deviceName string) (*usermodel.LoginResponse, error) {
+	// 获取用户
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	// 完成 WebAuthn 注册（验证 credential 并提取公钥）
+	credential, err := s.webauthn.FinishRegistration(user, session, r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to finish registration: %w", err)
+	}
+
+	// 保存 Passkey
+	passkey := &usermodel.Passkey{
+		UserID:       user.ID,
+		CredentialID: credential.ID,
+		PublicKey:    credential.PublicKey,
+		SignCount:    credential.Authenticator.SignCount,
+		DeviceName:   deviceName,
+		CreatedAt:    time.Now(),
+	}
+	if err := s.passkeyRepo.Create(ctx, passkey); err != nil {
+		return nil, fmt.Errorf("failed to save passkey: %w", err)
+	}
+
+	// 生成 JWT
+	token, err := middleware.GenerateToken(user.ID, user.Role, s.jwtSecret, s.jwtExpire)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	return &usermodel.LoginResponse{
+		Token: token,
+		User:  user.ToResponse(),
+	}, nil
+}

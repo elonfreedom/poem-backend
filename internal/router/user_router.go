@@ -94,6 +94,23 @@ func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config)
 		fuego.OptionTags("诗歌浏览"),
 	)
 
+	// 公开：跨设备 Passkey（设备 B 无 token）
+	fuego.Post(public, "/passkeys/add/connect", authHandler.AddDeviceConnect,
+		fuego.OptionSummary("新设备连接"),
+		fuego.OptionOverrideDescription("设备 B 扫码后连接，上报设备名称（公开接口）"),
+		fuego.OptionTags("Passkey 认证"),
+	)
+	fuego.Get(public, "/passkeys/add/status", authHandler.AddDeviceStatusPublic,
+		fuego.OptionSummary("查询连接状态"),
+		fuego.OptionOverrideDescription("设备 B 公开轮询连接状态，无需认证（公开接口）"),
+		fuego.OptionTags("Passkey 认证"),
+	)
+	fuego.Post(public, "/passkeys/add/finish", authHandler.AddDeviceFinish,
+		fuego.OptionSummary("完成设备注册"),
+		fuego.OptionOverrideDescription("设备 B 完成 Passkey 注册，获取 JWT（公开接口）"),
+		fuego.OptionTags("Passkey 认证"),
+	)
+
 	// ========== 用户路由（需认证）==========
 	userGroup := fuego.Group(server, "/api/user")
 	fuego.Use(userGroup, middleware.AuthMiddleware(cfg.JWT.Secret))
@@ -120,6 +137,23 @@ func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config)
 		fuego.OptionTags("个人信息"),
 	)
 
+	// [跨设备 Passkey] 添加新设备
+	fuego.Post(userGroup, "/passkeys/add/begin", authHandler.AddDeviceBegin,
+		fuego.OptionSummary("开始添加设备"),
+		fuego.OptionOverrideDescription("设备 A 发起添加新设备，生成连接令牌和 WebAuthn 注册选项"),
+		fuego.OptionTags("Passkey 认证"),
+	)
+	fuego.Get(userGroup, "/passkeys/add/status", authHandler.AddDeviceStatus,
+		fuego.OptionSummary("查询连接状态"),
+		fuego.OptionOverrideDescription("设备 A 轮询连接状态，确认设备 B 已连接"),
+		fuego.OptionTags("Passkey 认证"),
+	)
+	fuego.Post(userGroup, "/passkeys/add/confirm", authHandler.AddDeviceConfirm,
+		fuego.OptionSummary("确认授权"),
+		fuego.OptionOverrideDescription("设备 A 确认或拒绝新设备授权"),
+		fuego.OptionTags("Passkey 认证"),
+	)
+
 	// [诗歌浏览] 诗歌相关
 	fuego.Get(userGroup, "/poems", poemHandler.List,
 		fuego.OptionSummary("获取诗歌列表"),
@@ -136,12 +170,6 @@ func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config)
 		fuego.OptionOverrideDescription("按标题、作者、内容搜索诗歌"),
 		fuego.OptionTags("诗歌浏览"),
 	)
-	fuego.Get(userGroup, "/poems/daily", poemHandler.GetDaily,
-		fuego.OptionSummary("每日推荐"),
-		fuego.OptionOverrideDescription("获取每日推荐的诗歌"),
-		fuego.OptionTags("诗歌浏览"),
-	)
-
 	// [收藏管理] 收藏相关
 	fuego.Post(userGroup, "/favorites", favoriteHandler.AddFavorite,
 		fuego.OptionSummary("添加收藏"),

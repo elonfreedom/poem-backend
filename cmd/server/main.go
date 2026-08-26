@@ -8,8 +8,10 @@ import (
 	"github.com/go-fuego/fuego"
 
 	"poem-backend/internal/config"
+	"poem-backend/internal/middleware"
 	"poem-backend/internal/router"
 	"poem-backend/pkg/database"
+	"poem-backend/pkg/migrate"
 	"poem-backend/pkg/response"
 )
 
@@ -110,11 +112,18 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
+	// Run migrations
+	if err := migrate.Run(db); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
+	log.Println("Database migrations applied")
+
 	// 用户端 API Server - :8080（使用标准 HTTP 状态码）
 	userServer := fuego.NewServer(
 		fuego.WithAddr(":8080"),
 		fuego.WithoutAutoGroupTags(),
 		fuego.WithErrorSerializer(standardErrorSerializer),
+		fuego.WithGlobalMiddlewares(middleware.CORSMiddleware),
 	)
 	router.SetupUserRoutes(userServer, db, cfg)
 	// 健康检查（用户端）
@@ -127,6 +136,7 @@ func main() {
 		fuego.WithAddr(":8081"),
 		fuego.WithoutAutoGroupTags(),
 		fuego.WithErrorSerializer(vbenErrorSerializer),
+		fuego.WithGlobalMiddlewares(middleware.CORSMiddleware),
 	)
 	router.SetupAdminRoutes(adminServer, db, cfg)
 	// 健康检查（管理端）
