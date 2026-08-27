@@ -27,10 +27,21 @@ ENV_FILE="/root/.env"
 PORT_USER_API="8082:8080"   # 用户端 API
 PORT_ADMIN_API="8083:8081"  # 管理端 API
 
+# 注意：数据库迁移由容器启动时自动执行（migrate.Run），无需在 deploy.sh 中处理
+
 # ========== 构建 ==========
 build() {
+    echo "=== 同步迁移文件 ==="
+    # 确保嵌入的迁移文件与根目录一致（Go embed 使用 pkg/migrate/migrations/）
+    cp migrations/*.sql pkg/migrate/migrations/
+    echo "✅ 迁移文件已同步"
+
+    echo "=== 验证迁移文件同步 ==="
+    go test ./pkg/migrate/ -run TestMigrationsSynced -v
+
     echo "=== 构建 Docker 镜像 (linux/amd64) ==="
-    docker build --platform linux/amd64 -t "${IMAGE_NAME}:${IMAGE_TAG}" .
+    # 使用 --no-cache 确保迁移文件变更能生效（Go embed 在编译时嵌入文件）
+    docker build --no-cache --platform linux/amd64 -t "${IMAGE_NAME}:${IMAGE_TAG}" .
 
     echo "=== 导出镜像 ==="
     docker save "${IMAGE_NAME}:${IMAGE_TAG}" | gzip > "${TAR_FILE}"
@@ -68,7 +79,7 @@ deploy() {
             -p ${PORT_ADMIN_API} \
             ${IMAGE_NAME}:${IMAGE_TAG}" --timeout 30
 
-    echo "=== 等待服务启动 ==="
+    echo "=== 等待服务启动（含自动迁移） ==="
     sleep 10
 
     echo "=== 健康检查 ==="
