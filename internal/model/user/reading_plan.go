@@ -73,6 +73,7 @@ type DailyProgress struct {
 	ReadCount int       `json:"read_count" description:"已读数量"`
 	Target    int       `json:"target" description:"目标数量"`
 	IsReached bool      `json:"is_reached" description:"是否达标"`
+	PoemTitle string    `json:"poem_title" description:"当天打卡的诗文标题（未打卡为空）"`
 }
 
 // CurrentPlanResponse 当前计划响应

@@ -40,7 +40,7 @@ func (s *PoemService) List(ctx context.Context, page, pageSize int, categoryID *
 
 	return &usermodel.PoemListResponse{
 		Total: int(total),
-		List:  list,
+		Items: list,
 	}, nil
 }
 
@@ -61,16 +61,19 @@ func (s *PoemService) GetByID(ctx context.Context, poemID int64, userID *string)
 	}
 
 	resp := usermodel.PoemResponse{
-		ID:           poem.ID,
-		Title:        poem.Title,
-		Author:       poem.Author,
-		Dynasty:      poem.Dynasty,
-		Content:      poem.Content,
-		Translation:  poem.Translation,
-		Appreciation: poem.Appreciation,
-		Tags:         poem.Tags,
-		CoverURL:     poem.CoverURL,
-		IsFavorited:  isFavorited,
+		ID:            poem.ID,
+		Title:         poem.Title,
+		Author:        poem.Author,
+		Dynasty:       poem.Dynasty,
+		Content:       poem.Content,
+		Translation:   poem.Translation,
+		Appreciation:  poem.Appreciation,
+		Tags:          poem.Tags,
+		CoverURL:      poem.CoverURL,
+		IsFavorited:   isFavorited,
+		TitlePinyin:   poem.TitlePinyin,
+		ContentPinyin: poem.ContentPinyin,
+		AuthorPinyin:  poem.AuthorPinyin,
 	}
 
 	return &resp, nil
@@ -96,7 +99,7 @@ func (s *PoemService) Search(ctx context.Context, keyword string, page, pageSize
 
 	return &usermodel.PoemListResponse{
 		Total: int(total),
-		List:  list,
+		Items: list,
 	}, nil
 }
 
@@ -111,15 +114,18 @@ func (s *PoemService) GetDailyRecommendation(ctx context.Context) (*usermodel.Po
 	}
 
 	resp := usermodel.PoemResponse{
-		ID:           poem.ID,
-		Title:        poem.Title,
-		Author:       poem.Author,
-		Dynasty:      poem.Dynasty,
-		Content:      poem.Content,
-		Translation:  poem.Translation,
-		Appreciation: poem.Appreciation,
-		Tags:         poem.Tags,
-		CoverURL:     poem.CoverURL,
+		ID:            poem.ID,
+		Title:         poem.Title,
+		Author:        poem.Author,
+		Dynasty:       poem.Dynasty,
+		Content:       poem.Content,
+		Translation:   poem.Translation,
+		Appreciation:  poem.Appreciation,
+		Tags:          poem.Tags,
+		CoverURL:      poem.CoverURL,
+		TitlePinyin:   poem.TitlePinyin,
+		ContentPinyin: poem.ContentPinyin,
+		AuthorPinyin:  poem.AuthorPinyin,
 	}
 
 	return &resp, nil

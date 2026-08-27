@@ -1,23 +1,39 @@
 package migrate
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"poem-backend/internal/repository"
 )
 
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
+// expectedSchema 定义迁移完成后必须存在的关键表/列，用于验证迁移是否真正生效
+var expectedSchema = []struct {
+	table  string
+	column string
+}{
+	{"poems", "title_pinyin"},
+	{"poems", "content_pinyin"},
+	{"poems", "author_pinyin"},
+	{"passkeys", "flags"},
+	{"shared_plans", "id"},
+	{"plan_subscriptions", "id"},
+}
+
 // Run 执行数据库迁移（幂等，可重复调用）
 // 使用 golang-migrate + pgx 原生驱动，从 embed.FS 读取 migrations/*.sql
-// 如果迁移处于 dirty 状态，会尝试修复版本号后重新执行
 func Run(db *pgxpool.Pool) error {
 	// 从 pgxpool 获取连接字符串，构造 *sql.DB 供 golang-migrate 使用
 	connStr := db.Config().ConnString()
@@ -40,89 +56,124 @@ func Run(db *pgxpool.Pool) error {
 		return fmt.Errorf("failed to create pgx driver: %w", err)
 	}
 
-	// 创建 migrate 实例并执行
+	// 创建 migrate 实例
 	m, err := migrate.NewWithInstance("iofs", srcDriver, "pgx", dbDriver)
 	if err != nil {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
-	// 修复 dirty 状态：如果迁移失败标记为 dirty，尝试强制修正版本号
+	// 修复 dirty 状态（设为前一版本，让 Up() 重新执行）
 	if err := fixDirtyState(m); err != nil {
 		return fmt.Errorf("failed to fix dirty state: %w", err)
 	}
 
-	// 执行迁移
+	// 执行迁移（幂等迁移文件可安全重跑）
+	if err := runMigrations(m); err != nil {
+		return err
+	}
+
+	// 验证迁移结果：检查关键表/列是否存在
+	if err := verifySchema(sqlDB); err != nil {
+		log.Printf("Schema verification failed: %v", err)
+		// 验证失败时，强制回退并重试一次
+		log.Println("Retrying migrations after verification failure...")
+		if retryErr := retryMigrations(m); retryErr != nil {
+			return fmt.Errorf("migration retry failed: %w (original error: %v)", retryErr, err)
+		}
+		// 再次验证
+		if verifyErr := verifySchema(sqlDB); verifyErr != nil {
+			return fmt.Errorf("schema verification failed after retry: %w", verifyErr)
+		}
+	}
+
+	log.Println("Database migrations applied and verified")
+
+	// 迁移完成后，为存量诗歌生成拼音数据
+	poemRepo := repository.NewPoemRepository(db)
+	if err := poemRepo.EnsurePinyinForAllPoems(context.Background()); err != nil {
+		log.Printf("Pinyin generation warning: %v", err)
+		// 拼音生成失败不影响服务启动，admin 可以后续手动补充
+	}
+
+	return nil
+}
+
+// runMigrations 执行迁移并记录版本信息
+func runMigrations(m *migrate.Migrate) error {
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("migration failed: %w", err)
 	}
 
-	// 验证并修复：检查迁移是否实际生效，如果 schema_migrations 记录了版本但实际列不存在，回退版本重试
-	if err := verifyAndFixMigration(sqlDB, m); err != nil {
-		return fmt.Errorf("failed to verify migration: %w", err)
-	}
-
+	// 记录当前迁移版本
+	version, dirty, _ := m.Version()
+	log.Printf("Migration completed: version=%d, dirty=%v", version, dirty)
 	return nil
 }
 
-// verifyAndFixMigration 验证迁移是否实际生效
-// 检查 poems 表是否有 source 列，如果没有但 schema_migrations 记录了版本 15，则回退版本重试
-func verifyAndFixMigration(sqlDB *sql.DB, m *migrate.Migrate) error {
-	// 检查 poems 表是否有 source 列
-	var hasColumn bool
-	err := sqlDB.QueryRow(`
-		SELECT EXISTS (
-			SELECT 1 FROM information_schema.columns
-			WHERE table_name = 'poems' AND column_name = 'source'
-		)
-	`).Scan(&hasColumn)
-	if err != nil {
-		return fmt.Errorf("check source column failed: %w", err)
-	}
-
-	if hasColumn {
-		return nil // 列存在，无需修复
-	}
-
-	// 列不存在，检查 schema_migrations 是否记录了版本 15
-	version, dirty, err := m.Version()
+// retryMigrations 强制回退到前一版本后重新执行迁移
+func retryMigrations(m *migrate.Migrate) error {
+	version, _, err := m.Version()
 	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
-		return fmt.Errorf("get migration version failed: %w", err)
+		return err
 	}
 
-	// 如果当前版本 >= 15 且列不存在，说明迁移未实际生效，需要回退重试
-	if version >= 15 && !dirty {
-		// 回退到版本 14
-		if err := m.Force(14); err != nil {
-			return fmt.Errorf("force version 14 failed: %w", err)
-		}
-		// 重新执行迁移
-		if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-			return fmt.Errorf("re-migration failed: %w", err)
+	// 强制回退到前一版本
+	if version > 0 {
+		if err := m.Force(int(version) - 1); err != nil {
+			return fmt.Errorf("force version %d failed: %w", version-1, err)
 		}
 	}
 
-	return nil
+	// 重新执行迁移
+	return m.Up()
 }
 
 // fixDirtyState 修复迁移的 dirty 状态
-// 当迁移执行失败时，golang-migrate 会标记 dirty=true 并记录失败的版本号
-// 此函数检查当前版本的迁移文件是否已实际生效，如果生效则修正版本号
+// 当迁移失败被标记为 dirty 时，强制设为前一版本（version-1），
+// 这样 m.Up() 会重新执行当前迁移，而不是跳过它。
 func fixDirtyState(m *migrate.Migrate) error {
 	version, dirty, err := m.Version()
 	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
 		return err
 	}
 
-	// 如果不是 dirty 状态，直接返回
 	if !dirty {
 		return nil
 	}
 
-	// dirty 状态：强制将版本号设为当前版本（假设迁移已部分生效）
-	// 下次执行时会从这个版本继续
-	if err := m.Force(int(version)); err != nil {
-		return fmt.Errorf("force version %d failed: %w", version, err)
+	log.Printf("Found dirty migration at version %d, forcing to %d", version, version-1)
+
+	// dirty 状态：强制将版本号设为前一版本，让 Up() 重新执行当前迁移
+	if err := m.Force(int(version) - 1); err != nil {
+		return fmt.Errorf("force version %d failed: %w", version-1, err)
 	}
 
 	return nil
+}
+
+// verifySchema 验证关键表/列是否存在，确保迁移真正生效
+func verifySchema(db *sql.DB) error {
+	for _, exp := range expectedSchema {
+		exists, err := columnExists(db, exp.table, exp.column)
+		if err != nil {
+			return fmt.Errorf("check column %s.%s failed: %w", exp.table, exp.column, err)
+		}
+		if !exists {
+			return fmt.Errorf("expected column %s.%s does not exist", exp.table, exp.column)
+		}
+	}
+	return nil
+}
+
+// columnExists 检查指定表的指定列是否存在
+func columnExists(db *sql.DB, table, column string) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name = $1 AND column_name = $2
+		)
+	`
+	var exists bool
+	err := db.QueryRow(query, table, column).Scan(&exists)
+	return exists, err
 }

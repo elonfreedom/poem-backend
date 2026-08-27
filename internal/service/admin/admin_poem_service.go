@@ -7,6 +7,7 @@ import (
 	"poem-backend/internal/model"
 	adminmodel "poem-backend/internal/model/admin"
 	"poem-backend/internal/repository"
+	"poem-backend/pkg/pinyin"
 	"poem-backend/pkg/response"
 )
 
@@ -52,21 +53,39 @@ func (s *AdminPoemService) GetByID(ctx context.Context, id int64) (*adminmodel.A
 // Create 创建诗歌
 func (s *AdminPoemService) Create(ctx context.Context, req *adminmodel.AdminPoemCreateRequest, createdBy *string) (*adminmodel.AdminPoemResponse, error) {
 	now := time.Now()
+
+	// 生成拼音（如果未提供则自动生成）
+	titlePinyin := req.TitlePinyin
+	if titlePinyin == "" {
+		titlePinyin = pinyin.ToPinyin(req.Title)
+	}
+	contentPinyin := req.ContentPinyin
+	if contentPinyin == "" {
+		contentPinyin = pinyin.ToPinyinLines(req.Content)
+	}
+	authorPinyin := req.AuthorPinyin
+	if authorPinyin == "" {
+		authorPinyin = pinyin.ToPinyin(req.Author)
+	}
+
 	poem := &model.Poem{
-		Title:        req.Title,
-		Author:       req.Author,
-		Dynasty:      req.Dynasty,
-		Content:      req.Content,
-		Translation:  req.Translation,
-		Appreciation: req.Appreciation,
-		Source:       req.Source,
-		CategoryID:   req.CategoryID,
-		Tags:         req.Tags,
-		CoverURL:     req.CoverURL,
-		Status:       req.Status,
-		CreatedBy:    createdBy,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		Title:         req.Title,
+		Author:        req.Author,
+		Dynasty:       req.Dynasty,
+		Content:       req.Content,
+		Translation:   req.Translation,
+		Appreciation:  req.Appreciation,
+		Source:        req.Source,
+		CategoryID:    req.CategoryID,
+		Tags:          req.Tags,
+		CoverURL:      req.CoverURL,
+		Status:        req.Status,
+		CreatedBy:     createdBy,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		TitlePinyin:   titlePinyin,
+		ContentPinyin: contentPinyin,
+		AuthorPinyin:  authorPinyin,
 	}
 	if poem.Status == "" {
 		poem.Status = "draft"
@@ -100,6 +119,24 @@ func (s *AdminPoemService) Update(ctx context.Context, id int64, req *adminmodel
 	if req.Status != "" {
 		poem.Status = req.Status
 	}
+
+	// 更新拼音（如果未提供则自动生成）
+	if req.TitlePinyin != "" {
+		poem.TitlePinyin = req.TitlePinyin
+	} else {
+		poem.TitlePinyin = pinyin.ToPinyin(req.Title)
+	}
+	if req.ContentPinyin != "" {
+		poem.ContentPinyin = req.ContentPinyin
+	} else {
+		poem.ContentPinyin = pinyin.ToPinyinLines(req.Content)
+	}
+	if req.AuthorPinyin != "" {
+		poem.AuthorPinyin = req.AuthorPinyin
+	} else {
+		poem.AuthorPinyin = pinyin.ToPinyin(req.Author)
+	}
+
 	poem.UpdatedAt = time.Now()
 
 	return s.poemRepo.Update(ctx, poem)
@@ -123,21 +160,24 @@ func (s *AdminPoemService) BatchUpdateStatus(ctx context.Context, ids []int64, s
 // toAdminPoemResponse 转换 Poem 为 AdminPoemResponse
 func toAdminPoemResponse(p model.Poem, categoryName *string) adminmodel.AdminPoemResponse {
 	resp := adminmodel.AdminPoemResponse{
-		ID:           p.ID,
-		Title:        p.Title,
-		Author:       p.Author,
-		Dynasty:      p.Dynasty,
-		Content:      p.Content,
-		Translation:  p.Translation,
-		Appreciation: p.Appreciation,
-		Source:       p.Source,
-		CategoryID:   p.CategoryID,
-		Tags:         p.Tags,
-		CoverURL:     p.CoverURL,
-		Status:       p.Status,
-		CreatedBy:    p.CreatedBy,
-		CreatedAt:    p.CreatedAt,
-		UpdatedAt:    p.UpdatedAt,
+		ID:            p.ID,
+		Title:         p.Title,
+		Author:        p.Author,
+		Dynasty:       p.Dynasty,
+		Content:       p.Content,
+		Translation:   p.Translation,
+		Appreciation:  p.Appreciation,
+		Source:        p.Source,
+		CategoryID:    p.CategoryID,
+		Tags:          p.Tags,
+		CoverURL:      p.CoverURL,
+		Status:        p.Status,
+		CreatedBy:     p.CreatedBy,
+		CreatedAt:     p.CreatedAt,
+		UpdatedAt:     p.UpdatedAt,
+		TitlePinyin:   p.TitlePinyin,
+		ContentPinyin: p.ContentPinyin,
+		AuthorPinyin:  p.AuthorPinyin,
 	}
 	if categoryName != nil {
 		resp.CategoryName = *categoryName

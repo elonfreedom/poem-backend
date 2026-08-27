@@ -49,52 +49,64 @@ type AdminRoleInfo struct {
 
 // AdminPoemResponse 诗歌管理响应
 type AdminPoemResponse struct {
-	ID           int64     `json:"id" description:"诗歌ID"`
-	Title        string    `json:"title" description:"诗歌标题"`
-	Author       string    `json:"author" description:"作者"`
-	Dynasty      string    `json:"dynasty,omitempty" description:"朝代"`
-	Content      string    `json:"content" description:"原文内容"`
-	Translation  string    `json:"translation,omitempty" description:"现代译文"`
-	Appreciation string    `json:"appreciation,omitempty" description:"赏析"`
-	Source       string    `json:"source,omitempty" description:"来源（如《唐诗三百首》）"`
-	CategoryID   *int64    `json:"category_id,omitempty" description:"分类ID"`
-	CategoryName string    `json:"category_name,omitempty" description:"分类名称"`
-	Tags         []string  `json:"tags,omitempty" description:"标签列表"`
-	CoverURL     string    `json:"cover_url,omitempty" description:"封面图片URL"`
-	Status       string    `json:"status" description:"状态: draft, published, archived"`
-	CreatedBy    *string   `json:"created_by,omitempty" description:"创建者ID"`
-	CreatedAt    time.Time `json:"created_at" description:"创建时间"`
-	UpdatedAt    time.Time `json:"updated_at" description:"更新时间"`
+	ID            int64     `json:"id" description:"诗歌ID"`
+	Title         string    `json:"title" description:"诗歌标题"`
+	Author        string    `json:"author" description:"作者"`
+	Dynasty       string    `json:"dynasty,omitempty" description:"朝代"`
+	Content       string    `json:"content" description:"原文内容"`
+	Translation   string    `json:"translation,omitempty" description:"现代译文"`
+	Appreciation  string    `json:"appreciation,omitempty" description:"赏析"`
+	Source        string    `json:"source,omitempty" description:"来源（如《唐诗三百首》）"`
+	CategoryID    *int64    `json:"category_id,omitempty" description:"分类ID"`
+	CategoryName  string    `json:"category_name,omitempty" description:"分类名称"`
+	Tags          []string  `json:"tags,omitempty" description:"标签列表"`
+	CoverURL      string    `json:"cover_url,omitempty" description:"封面图片URL"`
+	Status        string    `json:"status" description:"状态: draft, published, archived"`
+	CreatedBy     *string   `json:"created_by,omitempty" description:"创建者ID"`
+	CreatedAt     time.Time `json:"created_at" description:"创建时间"`
+	UpdatedAt     time.Time `json:"updated_at" description:"更新时间"`
+	// 拼音字段（可手动校正多音字）
+	TitlePinyin   string `json:"title_pinyin" description:"标题拼音（带声调）"`
+	ContentPinyin string `json:"content_pinyin" description:"内容拼音（带声调）"`
+	AuthorPinyin  string `json:"author_pinyin" description:"作者拼音（带声调）"`
 }
 
 // AdminPoemCreateRequest 创建诗歌请求
 type AdminPoemCreateRequest struct {
-	Title        string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
-	Author       string   `json:"author" validate:"required,max=50" description:"作者"`
-	Dynasty      string   `json:"dynasty,omitempty" description:"朝代"`
-	Content      string   `json:"content" validate:"required" description:"原文内容"`
-	Translation  string   `json:"translation,omitempty" description:"现代译文"`
-	Appreciation string   `json:"appreciation,omitempty" description:"赏析"`
-	Source       string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
-	CategoryID   *int64   `json:"category_id,omitempty" description:"分类ID"`
-	Tags         []string `json:"tags,omitempty" description:"标签列表"`
-	CoverURL     string   `json:"cover_url,omitempty" description:"封面图片URL"`
-	Status       string   `json:"status,omitempty" description:"状态: draft/published/archived"`
+	Title         string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
+	Author        string   `json:"author" validate:"required,max=50" description:"作者"`
+	Dynasty       string   `json:"dynasty,omitempty" description:"朝代"`
+	Content       string   `json:"content" validate:"required" description:"原文内容"`
+	Translation   string   `json:"translation,omitempty" description:"现代译文"`
+	Appreciation  string   `json:"appreciation,omitempty" description:"赏析"`
+	Source        string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
+	CategoryID    *int64   `json:"category_id,omitempty" description:"分类ID"`
+	Tags          []string `json:"tags,omitempty" description:"标签列表"`
+	CoverURL      string   `json:"cover_url,omitempty" description:"封面图片URL"`
+	Status        string   `json:"status,omitempty" description:"状态: draft/published/archived"`
+	// 拼音字段（可手动校正多音字，留空则自动生成）
+	TitlePinyin   string `json:"title_pinyin,omitempty" description:"标题拼音（带声调）"`
+	ContentPinyin string `json:"content_pinyin,omitempty" description:"内容拼音（带声调）"`
+	AuthorPinyin  string `json:"author_pinyin,omitempty" description:"作者拼音（带声调）"`
 }
 
 // AdminPoemUpdateRequest 更新诗歌请求
 type AdminPoemUpdateRequest struct {
-	Title        string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
-	Author       string   `json:"author" validate:"required,max=50" description:"作者"`
-	Dynasty      string   `json:"dynasty,omitempty" description:"朝代"`
-	Content      string   `json:"content" validate:"required" description:"原文内容"`
-	Translation  string   `json:"translation,omitempty" description:"现代译文"`
-	Appreciation string   `json:"appreciation,omitempty" description:"赏析"`
-	Source       string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
-	CategoryID   *int64   `json:"category_id,omitempty" description:"分类ID"`
-	Tags         []string `json:"tags,omitempty" description:"标签列表"`
-	CoverURL     string   `json:"cover_url,omitempty" description:"封面图片URL"`
-	Status       string   `json:"status,omitempty" description:"状态: draft/published/archived"`
+	Title         string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
+	Author        string   `json:"author" validate:"required,max=50" description:"作者"`
+	Dynasty       string   `json:"dynasty,omitempty" description:"朝代"`
+	Content       string   `json:"content" validate:"required" description:"原文内容"`
+	Translation   string   `json:"translation,omitempty" description:"现代译文"`
+	Appreciation  string   `json:"appreciation,omitempty" description:"赏析"`
+	Source        string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
+	CategoryID    *int64   `json:"category_id,omitempty" description:"分类ID"`
+	Tags          []string `json:"tags,omitempty" description:"标签列表"`
+	CoverURL      string   `json:"cover_url,omitempty" description:"封面图片URL"`
+	Status        string   `json:"status,omitempty" description:"状态: draft/published/archived"`
+	// 拼音字段（可手动校正多音字，留空则自动生成）
+	TitlePinyin   string `json:"title_pinyin,omitempty" description:"标题拼音（带声调）"`
+	ContentPinyin string `json:"content_pinyin,omitempty" description:"内容拼音（带声调）"`
+	AuthorPinyin  string `json:"author_pinyin,omitempty" description:"作者拼音（带声调）"`
 }
 
 // AdminPoemUpdateStatusRequest 更新诗歌状态请求

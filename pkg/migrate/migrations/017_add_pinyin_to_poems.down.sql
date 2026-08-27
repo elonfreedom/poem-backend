@@ -1,0 +1,3 @@
+ALTER TABLE poems DROP COLUMN IF EXISTS title_pinyin;
+ALTER TABLE poems DROP COLUMN IF EXISTS content_pinyin;
+ALTER TABLE poems DROP COLUMN IF EXISTS author_pinyin;

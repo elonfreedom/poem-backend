@@ -22,6 +22,7 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 	*user.PoemHandler,
 	*user.FavoriteHandler,
 	*user.ReadingPlanHandler,
+	*user.SharedPlanHandler,
 	*user.CheckinHandler,
 ) {
 	// 初始化 WebAuthn
@@ -43,6 +44,7 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 	favoriteRepo := repository.NewFavoriteRepository(db)
 	readingPlanRepo := repository.NewReadingPlanRepository(db)
 	checkinRepo := repository.NewCheckinRepository(db)
+	sharedPlanRepo := repository.NewSharedPlanRepository(db)
 
 	// 初始化 Service
 	authService := userservice.NewAuthService(userRepo, passkeyRepo, wn, cfg.JWT.Secret, cfg.JWT.ExpireHour)
@@ -50,6 +52,7 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 	poemService := userservice.NewPoemService(poemRepo)
 	favoriteService := userservice.NewFavoriteService(favoriteRepo, poemRepo)
 	readingPlanService := userservice.NewReadingPlanService(readingPlanRepo)
+	sharedPlanService := userservice.NewSharedPlanService(sharedPlanRepo, poemRepo)
 	checkinService := userservice.NewCheckinService(checkinRepo)
 
 	// 初始化 Handler
@@ -58,14 +61,15 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 	poemHandler := user.NewPoemHandler(poemService)
 	favoriteHandler := user.NewFavoriteHandler(favoriteService)
 	readingPlanHandler := user.NewReadingPlanHandler(readingPlanService)
+	sharedPlanHandler := user.NewSharedPlanHandler(sharedPlanService)
 	checkinHandler := user.NewCheckinHandler(checkinService)
 
-	return authHandler, userHandler, poemHandler, favoriteHandler, readingPlanHandler, checkinHandler
+	return authHandler, userHandler, poemHandler, favoriteHandler, readingPlanHandler, sharedPlanHandler, checkinHandler
 }
 
 // SetupUserRoutes 注册用户端（C端）路由 - 端口 8080
 func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config) {
-	authHandler, userHandler, poemHandler, favoriteHandler, readingPlanHandler, checkinHandler :=
+	authHandler, userHandler, poemHandler, favoriteHandler, readingPlanHandler, sharedPlanHandler, checkinHandler :=
 		initUserDependencies(server, db, cfg)
 
 	// 启动定期清理过期 session（每 5 分钟）
@@ -101,6 +105,18 @@ func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config)
 		fuego.OptionSummary("每日推荐"),
 		fuego.OptionOverrideDescription("获取每日推荐诗歌（公开，无需认证）"),
 		fuego.OptionTags("诗歌浏览"),
+	)
+
+	// 公开：共享计划库浏览（无需认证）
+	fuego.Get(public, "/shared-plans", sharedPlanHandler.ListSharedPlans,
+		fuego.OptionSummary("浏览共享库"),
+		fuego.OptionOverrideDescription("分页浏览共享计划库（公开，无需认证）"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Get(public, "/shared-plans/{id}", sharedPlanHandler.GetSharedPlan,
+		fuego.OptionSummary("计划详情"),
+		fuego.OptionOverrideDescription("获取共享计划详情（公开，无需认证）"),
+		fuego.OptionTags("共享计划"),
 	)
 
 	// 公开：跨设备 Passkey（设备 B 无 token）
@@ -231,6 +247,97 @@ func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config)
 		fuego.OptionSummary("记录阅读"),
 		fuego.OptionOverrideDescription("记录今日阅读的诗歌"),
 		fuego.OptionTags("阅读计划"),
+	)
+
+	// [共享计划] 计划共享库 — 管理我创建的计划
+	fuego.Post(userGroup, "/shared-plans", sharedPlanHandler.CreateSharedPlan,
+		fuego.OptionSummary("创建共享计划"),
+		fuego.OptionOverrideDescription("创建并发布计划到共享库"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Get(userGroup, "/shared-plans/mine", sharedPlanHandler.GetMySharedPlans,
+		fuego.OptionSummary("我的计划"),
+		fuego.OptionOverrideDescription("获取我创建的共享计划列表"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Put(userGroup, "/shared-plans/{id}", sharedPlanHandler.UpdateSharedPlan,
+		fuego.OptionSummary("更新计划"),
+		fuego.OptionOverrideDescription("更新共享计划"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Put(userGroup, "/shared-plans/{id}/publish", sharedPlanHandler.PublishPlan,
+		fuego.OptionSummary("发布计划"),
+		fuego.OptionOverrideDescription("重新发布计划"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Put(userGroup, "/shared-plans/{id}/unpublish", sharedPlanHandler.UnpublishPlan,
+		fuego.OptionSummary("取消发布"),
+		fuego.OptionOverrideDescription("从共享库下架计划"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Delete(userGroup, "/shared-plans/{id}", sharedPlanHandler.DeleteSharedPlan,
+		fuego.OptionSummary("删除计划"),
+		fuego.OptionOverrideDescription("删除共享计划"),
+		fuego.OptionTags("共享计划"),
+	)
+
+	// [共享计划] 订阅管理
+	fuego.Post(userGroup, "/shared-plans/{id}/subscribe", sharedPlanHandler.Subscribe,
+		fuego.OptionSummary("订阅计划"),
+		fuego.OptionOverrideDescription("订阅共享计划"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Delete(userGroup, "/shared-plans/{id}/subscribe", sharedPlanHandler.Unsubscribe,
+		fuego.OptionSummary("取消订阅"),
+		fuego.OptionOverrideDescription("取消订阅共享计划"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Put(userGroup, "/subscriptions/{id}/start-date", sharedPlanHandler.SetStartDate,
+		fuego.OptionSummary("设置开始日期"),
+		fuego.OptionOverrideDescription("设置订阅计划的开始日期"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Get(userGroup, "/subscriptions", sharedPlanHandler.GetMySubscriptions,
+		fuego.OptionSummary("我的订阅"),
+		fuego.OptionOverrideDescription("获取我的订阅列表"),
+		fuego.OptionTags("共享计划"),
+	)
+
+	// [共享计划] 每日诗文 & 打卡
+	fuego.Get(userGroup, "/subscriptions/{id}/today", sharedPlanHandler.GetTodayPoem,
+		fuego.OptionSummary("今日诗文"),
+		fuego.OptionOverrideDescription("获取今日需要阅读的诗文"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Post(userGroup, "/subscriptions/{id}/checkin", sharedPlanHandler.Checkin,
+		fuego.OptionSummary("打卡"),
+		fuego.OptionOverrideDescription("今日打卡"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Post(userGroup, "/subscriptions/{id}/skip", sharedPlanHandler.SkipDay,
+		fuego.OptionSummary("跳过天数"),
+		fuego.OptionOverrideDescription("跳过当前天，返回下一首未打卡的诗文"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Get(userGroup, "/subscriptions/{id}/progress", sharedPlanHandler.GetSubscriptionProgress,
+		fuego.OptionSummary("订阅进度"),
+		fuego.OptionOverrideDescription("获取订阅计划的打卡进度"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Get(userGroup, "/subscriptions/{id}/checkins", sharedPlanHandler.GetCheckins,
+		fuego.OptionSummary("打卡记录"),
+		fuego.OptionOverrideDescription("获取订阅计划的所有打卡记录（用于热力图）"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Put(userGroup, "/subscriptions/{id}/pause", sharedPlanHandler.PauseSubscription,
+		fuego.OptionSummary("暂停订阅"),
+		fuego.OptionOverrideDescription("暂停订阅计划"),
+		fuego.OptionTags("共享计划"),
+	)
+	fuego.Put(userGroup, "/subscriptions/{id}/resume", sharedPlanHandler.ResumeSubscription,
+		fuego.OptionSummary("恢复订阅"),
+		fuego.OptionOverrideDescription("恢复订阅计划"),
+		fuego.OptionTags("共享计划"),
 	)
 
 	// [打卡系统] 打卡相关

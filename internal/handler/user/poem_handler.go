@@ -75,7 +75,16 @@ func (h *PoemHandler) Search(c fuego.ContextNoBody) (map[string]any, error) {
 		return nil, fuego.BadRequestError{Title: "missing keyword", Detail: "搜索关键词不能为空"}
 	}
 
-	result, err := h.poemService.Search(c.Context(), keyword, 1, 10)
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	if page < 1 {
+		page = 1
+	}
+	perPage, _ := strconv.Atoi(c.QueryParam("per_page"))
+	if perPage < 1 || perPage > 50 {
+		perPage = 10
+	}
+
+	result, err := h.poemService.Search(c.Context(), keyword, page, perPage)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
