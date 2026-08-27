@@ -1,5 +1,5 @@
 -- 分类表
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
     id          BIGSERIAL PRIMARY KEY,
     name        VARCHAR(50) NOT NULL UNIQUE,
     sort        INT NOT NULL DEFAULT 0,
@@ -8,14 +8,14 @@ CREATE TABLE categories (
 );
 
 -- 标签表
-CREATE TABLE tags (
+CREATE TABLE IF NOT EXISTS tags (
     id          BIGSERIAL PRIMARY KEY,
     name        VARCHAR(50) NOT NULL UNIQUE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 诗歌表
-CREATE TABLE poems (
+CREATE TABLE IF NOT EXISTS poems (
     id              BIGSERIAL PRIMARY KEY,
     title           VARCHAR(100) NOT NULL,
     author          VARCHAR(50) NOT NULL,
@@ -32,15 +32,15 @@ CREATE TABLE poems (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_poems_category_id ON poems(category_id);
-CREATE INDEX idx_poems_status ON poems(status);
-CREATE INDEX idx_poems_created_at ON poems(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_poems_category_id ON poems(category_id);
+CREATE INDEX IF NOT EXISTS idx_poems_status ON poems(status);
+CREATE INDEX IF NOT EXISTS idx_poems_created_at ON poems(created_at DESC);
 
 -- 诗歌标签关联表
-CREATE TABLE poem_tags (
+CREATE TABLE IF NOT EXISTS poem_tags (
     poem_id     BIGINT NOT NULL REFERENCES poems(id) ON DELETE CASCADE,
     tag_id      BIGINT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
     PRIMARY KEY (poem_id, tag_id)
 );
 
-CREATE INDEX idx_poem_tags_tag_id ON poem_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_poem_tags_tag_id ON poem_tags(tag_id);

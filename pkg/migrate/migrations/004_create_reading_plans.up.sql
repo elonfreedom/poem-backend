@@ -1,5 +1,5 @@
 -- 阅读计划表（复合主键：user_id + plan_id，plan_id 为用户级自增）
-CREATE TABLE reading_plans (
+CREATE TABLE IF NOT EXISTS reading_plans (
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     plan_id         INT NOT NULL,                           -- 用户级自增
     daily_count     INT NOT NULL CHECK (daily_count > 0),
@@ -11,10 +11,10 @@ CREATE TABLE reading_plans (
     PRIMARY KEY (user_id, plan_id)
 );
 
-CREATE INDEX idx_reading_plans_user_status ON reading_plans(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_reading_plans_user_status ON reading_plans(user_id, status);
 
 -- 阅读进度表（复合主键：user_id + date）
-CREATE TABLE reading_progress (
+CREATE TABLE IF NOT EXISTS reading_progress (
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date        DATE NOT NULL,
     read_count  INT NOT NULL DEFAULT 0,
@@ -23,4 +23,4 @@ CREATE TABLE reading_progress (
     PRIMARY KEY (user_id, date)
 );
 
-CREATE INDEX idx_reading_progress_date ON reading_progress(date);
+CREATE INDEX IF NOT EXISTS idx_reading_progress_date ON reading_progress(date);

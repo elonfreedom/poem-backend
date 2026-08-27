@@ -1,5 +1,5 @@
 -- 恢复码表（用于账号恢复）
-CREATE TABLE recovery_codes (
+CREATE TABLE IF NOT EXISTS recovery_codes (
     id          BIGSERIAL PRIMARY KEY,
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     code_hash   VARCHAR(255) NOT NULL,                      -- bcrypt 哈希
@@ -8,4 +8,4 @@ CREATE TABLE recovery_codes (
     used_at     TIMESTAMPTZ
 );
 
-CREATE INDEX idx_recovery_codes_user_id ON recovery_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id);
