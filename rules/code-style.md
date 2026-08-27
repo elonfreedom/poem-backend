@@ -9,8 +9,14 @@
 - **DB 字段**: snake_case，与数据库列名一致
 
 ## 错误处理
+
+> **完整错误码体系请参考 `@error-code.md`**
+
 - 使用 `fmt.Errorf` 包装错误，保留原始错误链
-- API 错误通过 `pkg/response` 统一返回
+- API 错误使用 `fuego.*Error` 类型，**必须包含精确字段名和原因**
+- 数据库查不到数据 → 返回 404（`fuego.NotFoundError`），不能返回 400
+- 数据库操作失败 → 返回 500（`fuego.InternalServerError`），附带具体错误信息
+- 参数缺失/格式错误 → 返回 400（`fuego.BadRequestError`），标识具体字段名
 - 不要忽略错误，除非有明确注释说明
 
 ## 代码组织

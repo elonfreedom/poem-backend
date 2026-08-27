@@ -68,15 +68,22 @@ func standardErrorSerializer(w http.ResponseWriter, r *http.Request, err error) 
 
 	code := CodeBadRequest
 	message := err.Error()
+	detail := ""
 
-	// 提取 Fuego HTTPError 的状态码和标题
+	// 提取 Fuego HTTPError 的状态码、标题和详情
 	type httpError interface {
 		StatusCode() int
 		ErrorTitle() string
 	}
+	type detailError interface {
+		DetailMsg() string
+	}
 	if he, ok := err.(httpError); ok {
 		code = he.StatusCode()
 		message = he.ErrorTitle()
+	}
+	if de, ok := err.(detailError); ok {
+		detail = de.DetailMsg()
 	}
 
 	// 限制在已知错误码范围内，并映射到 HTTP 状态码
@@ -98,7 +105,7 @@ func standardErrorSerializer(w http.ResponseWriter, r *http.Request, err error) 
 	_ = json.NewEncoder(w).Encode(response.APIResponse[any]{
 		Code:    code,
 		Message: message,
-		Error:   message,
+		Error:   detail,
 	})
 }
 

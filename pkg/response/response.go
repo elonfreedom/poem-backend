@@ -21,9 +21,19 @@ type PageData[T any] struct {
 	Total int64 `json:"total" description:"总条数"`
 }
 
-// OK 成功响应
+// OK 成功响应（code: 0）
 func OK[T any](data T) *APIResponse[T] {
 	return &APIResponse[T]{Code: 0, Message: "ok", Data: data}
+}
+
+// Success 标准成功响应（code: 200, message: "success"）
+// 用于用户端接口统一返回格式
+func Success(data any) map[string]any {
+	return map[string]any{
+		"code":    200,
+		"message": "success",
+		"data":    data,
+	}
 }
 
 // PageOK 分页成功响应
@@ -46,8 +56,8 @@ func writeJSON(w http.ResponseWriter, code int, data any) error {
 	return json.NewEncoder(w).Encode(data)
 }
 
-// Success 成功响应 - 返回数据和错误
-func Success[T any](c fuego.ContextNoBody, data T) (any, error) {
+// SuccessHandler 成功响应 - 返回数据和错误（Fuego handler 用）
+func SuccessHandler[T any](c fuego.ContextNoBody, data T) (any, error) {
 	return data, nil
 }
 

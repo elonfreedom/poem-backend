@@ -56,6 +56,7 @@ type AdminPoemResponse struct {
 	Content      string    `json:"content" description:"原文内容"`
 	Translation  string    `json:"translation,omitempty" description:"现代译文"`
 	Appreciation string    `json:"appreciation,omitempty" description:"赏析"`
+	Source       string    `json:"source,omitempty" description:"来源（如《唐诗三百首》）"`
 	CategoryID   *int64    `json:"category_id,omitempty" description:"分类ID"`
 	CategoryName string    `json:"category_name,omitempty" description:"分类名称"`
 	Tags         []string  `json:"tags,omitempty" description:"标签列表"`
@@ -74,6 +75,7 @@ type AdminPoemCreateRequest struct {
 	Content      string   `json:"content" validate:"required" description:"原文内容"`
 	Translation  string   `json:"translation,omitempty" description:"现代译文"`
 	Appreciation string   `json:"appreciation,omitempty" description:"赏析"`
+	Source       string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
 	CategoryID   *int64   `json:"category_id,omitempty" description:"分类ID"`
 	Tags         []string `json:"tags,omitempty" description:"标签列表"`
 	CoverURL     string   `json:"cover_url,omitempty" description:"封面图片URL"`
@@ -88,6 +90,7 @@ type AdminPoemUpdateRequest struct {
 	Content      string   `json:"content" validate:"required" description:"原文内容"`
 	Translation  string   `json:"translation,omitempty" description:"现代译文"`
 	Appreciation string   `json:"appreciation,omitempty" description:"赏析"`
+	Source       string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
 	CategoryID   *int64   `json:"category_id,omitempty" description:"分类ID"`
 	Tags         []string `json:"tags,omitempty" description:"标签列表"`
 	CoverURL     string   `json:"cover_url,omitempty" description:"封面图片URL"`

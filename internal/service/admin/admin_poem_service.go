@@ -59,6 +59,7 @@ func (s *AdminPoemService) Create(ctx context.Context, req *adminmodel.AdminPoem
 		Content:      req.Content,
 		Translation:  req.Translation,
 		Appreciation: req.Appreciation,
+		Source:       req.Source,
 		CategoryID:   req.CategoryID,
 		Tags:         req.Tags,
 		CoverURL:     req.CoverURL,
@@ -92,6 +93,7 @@ func (s *AdminPoemService) Update(ctx context.Context, id int64, req *adminmodel
 	poem.Content = req.Content
 	poem.Translation = req.Translation
 	poem.Appreciation = req.Appreciation
+	poem.Source = req.Source
 	poem.CategoryID = req.CategoryID
 	poem.Tags = req.Tags
 	poem.CoverURL = req.CoverURL
@@ -128,6 +130,7 @@ func toAdminPoemResponse(p model.Poem, categoryName *string) adminmodel.AdminPoe
 		Content:      p.Content,
 		Translation:  p.Translation,
 		Appreciation: p.Appreciation,
+		Source:       p.Source,
 		CategoryID:   p.CategoryID,
 		Tags:         p.Tags,
 		CoverURL:     p.CoverURL,

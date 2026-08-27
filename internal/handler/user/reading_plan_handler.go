@@ -8,6 +8,7 @@ import (
 	"poem-backend/internal/middleware"
 	usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
+	"poem-backend/pkg/response"
 )
 
 type ReadingPlanHandler struct {
@@ -19,7 +20,7 @@ func NewReadingPlanHandler(readingPlanService *userservice.ReadingPlanService) *
 }
 
 // CreatePlan 创建阅读计划
-func (h *ReadingPlanHandler) CreatePlan(c fuego.ContextWithBody[usermodel.CreatePlanRequest]) (*usermodel.CreatePlanResponse, error) {
+func (h *ReadingPlanHandler) CreatePlan(c fuego.ContextWithBody[usermodel.CreatePlanRequest]) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -35,11 +36,11 @@ func (h *ReadingPlanHandler) CreatePlan(c fuego.ContextWithBody[usermodel.Create
 		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }
 
 // GetCurrentPlan 获取当前计划
-func (h *ReadingPlanHandler) GetCurrentPlan(c fuego.ContextNoBody) (*usermodel.CurrentPlanResponse, error) {
+func (h *ReadingPlanHandler) GetCurrentPlan(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -50,11 +51,11 @@ func (h *ReadingPlanHandler) GetCurrentPlan(c fuego.ContextNoBody) (*usermodel.C
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }
 
 // PausePlan 暂停计划
-func (h *ReadingPlanHandler) PausePlan(c fuego.ContextNoBody) (map[string]string, error) {
+func (h *ReadingPlanHandler) PausePlan(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -69,11 +70,11 @@ func (h *ReadingPlanHandler) PausePlan(c fuego.ContextNoBody) (map[string]string
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return map[string]string{"status": "paused"}, nil
+	return response.Success(map[string]string{"status": "paused"}), nil
 }
 
 // ResumePlan 恢复计划
-func (h *ReadingPlanHandler) ResumePlan(c fuego.ContextNoBody) (map[string]string, error) {
+func (h *ReadingPlanHandler) ResumePlan(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -88,11 +89,11 @@ func (h *ReadingPlanHandler) ResumePlan(c fuego.ContextNoBody) (map[string]strin
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return map[string]string{"status": "resumed"}, nil
+	return response.Success(map[string]string{"status": "resumed"}), nil
 }
 
 // GetPlanProgress 获取计划进度
-func (h *ReadingPlanHandler) GetPlanProgress(c fuego.ContextNoBody) (*usermodel.PlanProgressResponse, error) {
+func (h *ReadingPlanHandler) GetPlanProgress(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -108,11 +109,11 @@ func (h *ReadingPlanHandler) GetPlanProgress(c fuego.ContextNoBody) (*usermodel.
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }
 
 // LogReading 记录阅读
-func (h *ReadingPlanHandler) LogReading(c fuego.ContextWithBody[usermodel.LogReadingRequest]) (*usermodel.LogReadingResponse, error) {
+func (h *ReadingPlanHandler) LogReading(c fuego.ContextWithBody[usermodel.LogReadingRequest]) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -128,5 +129,5 @@ func (h *ReadingPlanHandler) LogReading(c fuego.ContextWithBody[usermodel.LogRea
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }

@@ -119,6 +119,11 @@ func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config)
 		fuego.OptionOverrideDescription("设备 B 完成 Passkey 注册，获取 JWT（公开接口）"),
 		fuego.OptionTags("Passkey 认证"),
 	)
+	fuego.Post(public, "/passkeys/add/reject", authHandler.AddDeviceReject,
+		fuego.OptionSummary("设备 B 放弃绑定"),
+		fuego.OptionOverrideDescription("设备 B 主动放弃创建 Passkey，通知设备 A 关闭等待弹窗（公开接口）"),
+		fuego.OptionTags("Passkey 认证"),
+	)
 
 	// ========== 用户路由（需认证）==========
 	userGroup := fuego.Group(server, "/api/user")

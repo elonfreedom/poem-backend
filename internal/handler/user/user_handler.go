@@ -8,6 +8,7 @@ import (
 	"poem-backend/internal/middleware"
 	usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
+	"poem-backend/pkg/response"
 )
 
 type UserHandler struct {
@@ -19,7 +20,7 @@ func NewUserHandler(userService *userservice.UserService) *UserHandler {
 }
 
 // GetProfile 获取个人信息
-func (h *UserHandler) GetProfile(c fuego.ContextNoBody) (*usermodel.UserResponse, error) {
+func (h *UserHandler) GetProfile(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -30,11 +31,11 @@ func (h *UserHandler) GetProfile(c fuego.ContextNoBody) (*usermodel.UserResponse
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return profile, nil
+	return response.Success(profile), nil
 }
 
 // UpdateProfile 更新个人信息
-func (h *UserHandler) UpdateProfile(c fuego.ContextWithBody[usermodel.UpdateProfileRequest]) (*usermodel.UserResponse, error) {
+func (h *UserHandler) UpdateProfile(c fuego.ContextWithBody[usermodel.UpdateProfileRequest]) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -50,11 +51,11 @@ func (h *UserHandler) UpdateProfile(c fuego.ContextWithBody[usermodel.UpdateProf
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return profile, nil
+	return response.Success(profile), nil
 }
 
 // GetPasskeys 获取 Passkey 列表
-func (h *UserHandler) GetPasskeys(c fuego.ContextNoBody) ([]usermodel.PasskeyResponse, error) {
+func (h *UserHandler) GetPasskeys(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -65,11 +66,11 @@ func (h *UserHandler) GetPasskeys(c fuego.ContextNoBody) ([]usermodel.PasskeyRes
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return passkeys, nil
+	return response.Success(passkeys), nil
 }
 
 // DeletePasskey 删除 Passkey
-func (h *UserHandler) DeletePasskey(c fuego.ContextNoBody) (map[string]string, error) {
+func (h *UserHandler) DeletePasskey(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -84,5 +85,5 @@ func (h *UserHandler) DeletePasskey(c fuego.ContextNoBody) (map[string]string, e
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return map[string]string{"status": "deleted"}, nil
+	return response.Success(map[string]string{"status": "deleted"}), nil
 }

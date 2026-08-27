@@ -21,12 +21,23 @@
 ```
 
 ## 错误码
-- `200`: 成功
-- `400`: 请求参数错误
-- `401`: 未认证
-- `403`: 无权限
-- `404`: 资源不存在
-- `500`: 服务器内部错误
+
+采用 **HTTP 状态码 + 业务错误码双轨制**。详细错误码体系见 `@error-code.md`。
+
+| HTTP 状态码 | 含义 | 使用场景 |
+|-------------|------|----------|
+| `400` | 请求参数错误 | 参数缺失、格式错误、JSON 解析失败 |
+| `401` | 未认证 | 缺少 Token、Token 过期/无效 |
+| `403` | 无权限 | 无权访问他人资源、非管理员 |
+| `404` | 资源不存在 | 数据库查不到数据（用户/资源/连接等） |
+| `409` | 业务冲突 | 连接令牌过期、状态不匹配 |
+| `422` | 验证失败 | WebAuthn 验证、凭证验证失败 |
+| `500` | 服务器内部错误 | 数据库操作失败、未预期的错误 |
+
+**核心规则**：
+- 数据库查不到数据 → **必须返回 404**，不能返回 400
+- 数据库操作失败 → **必须返回 500**，附带具体错误信息
+- 参数错误 → **必须标识具体字段名和原因**，不能笼统返回"参数错误"
 
 ---
 
@@ -111,19 +122,30 @@ fuego.Post(group, "/reading-plans", readingPlanHandler.CreatePlan,
 
 ## 4. 错误处理规范
 
-### 4.1 使用 Fuego 错误类型
+> **完整错误码体系请参考 `@error-code.md`**
+
+### 4.1 使用 Fuego 错误类型 + 精确描述
+
+每个错误必须明确标识**哪个参数**、**什么问题**、**期望值是什么**：
+
 ```go
-// 400 - 请求参数错误
-return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的诗歌 ID"}
+// 400 - 参数缺失（标识字段名）
+return nil, fuego.BadRequestError{Title: "missing parameter", Detail: "token 不能为空"}
+
+// 400 - 参数格式错误（标识字段名 + 期望格式）
+return nil, fuego.BadRequestError{Title: "invalid parameter", Detail: fmt.Sprintf("user_id 格式错误: %s 不是有效 UUID", id)}
+
+// 404 - 资源不存在（标识资源类型 + ID）
+return nil, fuego.NotFoundError{Title: "user not found", Detail: fmt.Sprintf("用户不存在: id=%s", userID)}
 
 // 401 - 未认证
-return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录或 Token 已过期"}
 
-// 404 - 资源不存在
-return nil, fuego.NotFoundError{Title: "not found", Detail: "诗歌不存在"}
+// 403 - 无权限
+return nil, fuego.ForbiddenError{Title: "forbidden", Detail: "无权访问此资源"}
 
-// 500 - 服务器内部错误
-return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+// 500 - 数据库错误（标识操作 + 错误原因）
+return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户失败: id=%s, error=%v", id, err)}
 ```
 
 ### 4.2 禁止使用旧版 response 包
@@ -132,7 +154,22 @@ return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error
 return nil, response.BadRequest(c, "invalid request")
 
 // ✅ 正确：使用 Fuego 错误类型
-return nil, fuego.BadRequestError{Title: "bad request", Detail: "无效的请求"}
+return nil, fuego.BadRequestError{Title: "missing parameter", Detail: "token 不能为空"}
+```
+
+### 4.3 禁止笼统返回 400
+
+```go
+// ❌ 错误：调用方无法区分是参数错误还是数据不存在
+if err != nil {
+    return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+}
+
+// ✅ 精确：区分"查不到"和"查询失败"
+if errors.Is(err, pgx.ErrNoRows) {
+    return nil, fuego.NotFoundError{Title: "user not found", Detail: fmt.Sprintf("用户不存在: id=%s", id)}
+}
+return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询失败: %v", err)}
 ```
 
 ## 5. 完整示例

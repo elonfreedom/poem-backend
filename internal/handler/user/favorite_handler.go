@@ -8,6 +8,7 @@ import (
 	"poem-backend/internal/middleware"
 	usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
+	"poem-backend/pkg/response"
 )
 
 type FavoriteHandler struct {
@@ -19,7 +20,7 @@ func NewFavoriteHandler(favoriteService *userservice.FavoriteService) *FavoriteH
 }
 
 // AddFavorite 添加收藏
-func (h *FavoriteHandler) AddFavorite(c fuego.ContextWithBody[usermodel.FavoriteRequest]) (map[string]string, error) {
+func (h *FavoriteHandler) AddFavorite(c fuego.ContextWithBody[usermodel.FavoriteRequest]) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -34,11 +35,11 @@ func (h *FavoriteHandler) AddFavorite(c fuego.ContextWithBody[usermodel.Favorite
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return map[string]string{"status": "favorited"}, nil
+	return response.Success(map[string]string{"status": "favorited"}), nil
 }
 
 // RemoveFavorite 取消收藏
-func (h *FavoriteHandler) RemoveFavorite(c fuego.ContextNoBody) (map[string]string, error) {
+func (h *FavoriteHandler) RemoveFavorite(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -53,11 +54,11 @@ func (h *FavoriteHandler) RemoveFavorite(c fuego.ContextNoBody) (map[string]stri
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return map[string]string{"status": "unfavorited"}, nil
+	return response.Success(map[string]string{"status": "unfavorited"}), nil
 }
 
 // ListFavorites 获取收藏列表
-func (h *FavoriteHandler) ListFavorites(c fuego.ContextNoBody) (*usermodel.FavoriteListResponse, error) {
+func (h *FavoriteHandler) ListFavorites(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -68,5 +69,5 @@ func (h *FavoriteHandler) ListFavorites(c fuego.ContextNoBody) (*usermodel.Favor
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }

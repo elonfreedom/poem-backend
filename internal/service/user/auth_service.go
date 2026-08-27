@@ -204,13 +204,20 @@ func (s *AuthService) BeginAddDevice(ctx context.Context, userID string, deviceN
 	// 获取用户
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return "", nil, nil, time.Time{}, fmt.Errorf("user not found: %w", err)
+		return "", nil, nil, time.Time{}, fmt.Errorf("查询用户失败: id=%s, error=%w", userID, err)
 	}
 
-	// 开始 WebAuthn 注册（为现有用户添加新 credential）
-	options, session, err := s.webauthn.BeginRegistration(user)
+	// 查询用户已有的 Passkey 凭证，用于 excludeCredentials
+	// 避免 iCloud Keychain 等同步场景下浏览器返回 NotAllowedError
+	excludeList, err := s.buildExcludeList(ctx, userID)
 	if err != nil {
-		return "", nil, nil, time.Time{}, fmt.Errorf("failed to begin registration: %w", err)
+		return "", nil, nil, time.Time{}, fmt.Errorf("查询已有凭证失败: user_id=%s, error=%w", userID, err)
+	}
+
+	// 开始 WebAuthn 注册（为现有用户添加新 credential，排除已有凭证）
+	options, session, err := s.webauthn.BeginRegistration(user, webauthn.WithExclusions(excludeList))
+	if err != nil {
+		return "", nil, nil, time.Time{}, fmt.Errorf("初始化 WebAuthn 注册失败: user_id=%s, error=%w", userID, err)
 	}
 
 	// 生成连接令牌（10分钟有效）
@@ -220,19 +227,37 @@ func (s *AuthService) BeginAddDevice(ctx context.Context, userID string, deviceN
 	return token, options, session, expiresAt, nil
 }
 
+// buildExcludeList 构建 excludeCredentials 列表
+// 将用户已有的 Passkey 凭证 ID 转换为 WebAuthn CredentialDescriptor
+func (s *AuthService) buildExcludeList(ctx context.Context, userID string) ([]protocol.CredentialDescriptor, error) {
+	passkeys, err := s.passkeyRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	excludeList := make([]protocol.CredentialDescriptor, 0, len(passkeys))
+	for _, pk := range passkeys {
+		excludeList = append(excludeList, protocol.CredentialDescriptor{
+			Type:         protocol.PublicKeyCredentialType,
+			CredentialID: pk.CredentialID,
+		})
+	}
+	return excludeList, nil
+}
+
 // FinishAddDevice 完成新设备注册
 // 使用 WebAuthn 库验证 credential 并提取公钥
 func (s *AuthService) FinishAddDevice(ctx context.Context, userID string, session webauthn.SessionData, r *http.Request, deviceName string) (*usermodel.LoginResponse, error) {
 	// 获取用户
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, fmt.Errorf("查询用户失败: id=%s, error=%w", userID, err)
 	}
 
 	// 完成 WebAuthn 注册（验证 credential 并提取公钥）
 	credential, err := s.webauthn.FinishRegistration(user, session, r)
 	if err != nil {
-		return nil, fmt.Errorf("failed to finish registration: %w", err)
+		return nil, fmt.Errorf("WebAuthn 凭证验证失败: user_id=%s, error=%w", userID, err)
 	}
 
 	// 保存 Passkey
@@ -246,13 +271,13 @@ func (s *AuthService) FinishAddDevice(ctx context.Context, userID string, sessio
 		CreatedAt:    time.Now(),
 	}
 	if err := s.passkeyRepo.Create(ctx, passkey); err != nil {
-		return nil, fmt.Errorf("failed to save passkey: %w", err)
+		return nil, fmt.Errorf("保存 Passkey 失败: user_id=%s, credential_id=%s, error=%w", userID, credential.ID, err)
 	}
 
 	// 生成 JWT
 	token, err := middleware.GenerateToken(user.ID, user.Role, s.jwtSecret, s.jwtExpire)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+		return nil, fmt.Errorf("生成 Token 失败: user_id=%s, error=%w", userID, err)
 	}
 
 	return &usermodel.LoginResponse{

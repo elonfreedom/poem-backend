@@ -13,6 +13,7 @@ type Poem struct {
 	Content      string    `json:"content" db:"content" description:"原文内容"`
 	Translation  string    `json:"translation" db:"translation" description:"现代译文"`
 	Appreciation string    `json:"appreciation" db:"appreciation" description:"赏析"`
+	Source       string    `json:"source" db:"source" description:"来源（如《唐诗三百首》）"`
 	CategoryID   *int64    `json:"category_id,omitempty" db:"category_id" description:"分类ID"`
 	Tags         []string  `json:"tags" db:"tags" description:"标签列表"`
 	CoverURL     string    `json:"cover_url" db:"cover_url" description:"封面图片URL"`

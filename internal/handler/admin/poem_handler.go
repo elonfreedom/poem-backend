@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/go-fuego/fuego"
@@ -40,17 +41,71 @@ func (h *PoemHandler) BatchUpdateStatus(c fuego.ContextWithBody[adminmodel.Admin
 	return response.OK[any](nil), nil
 }
 
-// ImportPoems 批量导入诗歌（JSON 数组 body）
-func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[[]adminmodel.AdminPoemCreateRequest]) (*response.APIResponse[ImportResponse], error) {
-	body, err := c.Body()
+// ImportPoemsRequest 批量导入诗歌请求（支持顶层 source 作为默认来源）
+// 兼容两种格式：
+// 1. 数组格式：[{title, author, ...}, ...]（原有格式）
+// 2. 对象格式：{source: "唐诗三百首", poems: [{title, author, ...}, ...]}
+type ImportPoemsRequest struct {
+	Source string                           `json:"source" description:"默认来源（如《唐诗三百首》），未单独指定 source 的诗文继承此值"`
+	Poems  []adminmodel.AdminPoemCreateRequest `json:"poems" description:"诗歌列表"`
+}
+
+// ImportPoems 批量导入诗歌
+// 支持两种请求格式：
+// 1. JSON 数组：[{title, author, content, status, source?}, ...]
+// 2. JSON 对象：{source: "唐诗三百首", poems: [{title, author, content, status}, ...]}
+func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[any]) (*response.APIResponse[ImportResponse], error) {
+	// 读取原始 body 字节
+	rawBody, err := c.Body()
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid body", Detail: "请求体必须是 JSON 数组"}
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: "请求体格式错误"}
 	}
 
-	result := ImportResponse{Total: len(body)}
+	// 将 body 转为 map 判断格式
+	bodyMap, ok := rawBody.(map[string]any)
+	if !ok {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: "请求体必须是 JSON 数组或对象"}
+	}
+
+	var poems []adminmodel.AdminPoemCreateRequest
+	var defaultSource string
+
+	// 判断是对象格式还是数组格式
+	if poemsRaw, exists := bodyMap["poems"]; exists {
+		// 对象格式：{source, poems}
+		if source, ok := bodyMap["source"].(string); ok {
+			defaultSource = source
+		}
+		// 解析 poems 数组
+		poemsJSON, err := json.Marshal(poemsRaw)
+		if err != nil {
+			return nil, fuego.BadRequestError{Title: "invalid poems", Detail: "poems 字段格式错误"}
+		}
+		if err := json.Unmarshal(poemsJSON, &poems); err != nil {
+			return nil, fuego.BadRequestError{Title: "invalid poems", Detail: "poems 数组解析失败"}
+		}
+	} else {
+		// 尝试解析为数组（原有格式）
+		reqBody, err := json.Marshal(rawBody)
+		if err != nil {
+			return nil, fuego.BadRequestError{Title: "invalid body", Detail: "请求体解析失败"}
+		}
+		// 尝试解析为数组
+		if err := json.Unmarshal(reqBody, &poems); err != nil {
+			// 尝试解析为对象格式
+			var req ImportPoemsRequest
+			if err := json.Unmarshal(reqBody, &req); err != nil {
+				return nil, fuego.BadRequestError{Title: "invalid body", Detail: "请求体必须是 JSON 数组或 {source, poems} 对象"}
+			}
+			defaultSource = req.Source
+			poems = req.Poems
+		}
+	}
+
+	result := ImportResponse{Total: len(poems)}
 	userID := middleware.GetUserIDFromContext(c.Context())
 
-	for i, req := range body {
+	for i, req := range poems {
 		// 校验必填字段
 		if req.Title == "" || req.Author == "" || req.Content == "" || req.Status == "" {
 			result.Failed++
@@ -60,6 +115,10 @@ func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[[]adminmodel.AdminPoem
 				Error: "缺少必填字段：title、author、content、status",
 			})
 			continue
+		}
+		// 未指定 source 时使用默认值
+		if req.Source == "" && defaultSource != "" {
+			req.Source = defaultSource
 		}
 		if _, err := h.poemService.Create(c.Context(), &req, &userID); err != nil {
 			result.Failed++

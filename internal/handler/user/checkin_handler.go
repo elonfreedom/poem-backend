@@ -6,8 +6,8 @@ import (
 	"github.com/go-fuego/fuego"
 
 	"poem-backend/internal/middleware"
-	usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
+	"poem-backend/pkg/response"
 )
 
 type CheckinHandler struct {
@@ -25,7 +25,7 @@ type CheckinRequest struct {
 }
 
 // Checkin 打卡
-func (h *CheckinHandler) Checkin(c fuego.ContextWithBody[CheckinRequest]) (*usermodel.CheckInResponse, error) {
+func (h *CheckinHandler) Checkin(c fuego.ContextWithBody[CheckinRequest]) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -41,11 +41,11 @@ func (h *CheckinHandler) Checkin(c fuego.ContextWithBody[CheckinRequest]) (*user
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }
 
 // GetStats 获取打卡统计
-func (h *CheckinHandler) GetStats(c fuego.ContextNoBody) (*usermodel.CheckInStatsResponse, error) {
+func (h *CheckinHandler) GetStats(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -56,11 +56,11 @@ func (h *CheckinHandler) GetStats(c fuego.ContextNoBody) (*usermodel.CheckInStat
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }
 
 // GetCheckinList 获取打卡记录列表
-func (h *CheckinHandler) GetCheckinList(c fuego.ContextNoBody) (*usermodel.CheckInListResponse, error) {
+func (h *CheckinHandler) GetCheckinList(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -74,11 +74,11 @@ func (h *CheckinHandler) GetCheckinList(c fuego.ContextNoBody) (*usermodel.Check
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }
 
 // GetCalendar 获取打卡日历
-func (h *CheckinHandler) GetCalendar(c fuego.ContextNoBody) (*usermodel.CheckInCalendarResponse, error) {
+func (h *CheckinHandler) GetCalendar(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -92,11 +92,11 @@ func (h *CheckinHandler) GetCalendar(c fuego.ContextNoBody) (*usermodel.CheckInC
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }
 
 // GetRanking 获取排行榜
-func (h *CheckinHandler) GetRanking(c fuego.ContextNoBody) (*usermodel.RankingResponse, error) {
+func (h *CheckinHandler) GetRanking(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
@@ -107,5 +107,5 @@ func (h *CheckinHandler) GetRanking(c fuego.ContextNoBody) (*usermodel.RankingRe
 		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
 	}
 
-	return result, nil
+	return response.Success(result), nil
 }

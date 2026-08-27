@@ -10,6 +10,12 @@ import (
 // connectionTTL 连接有效期
 const connectionTTL = 10 * time.Minute
 
+// heartbeatTimeout 心跳超时时间（设备 B 超过此时间未活跃则视为离线）
+const heartbeatTimeout = 60 * time.Second
+
+// heartbeatCleanupInterval 心跳清理间隔
+const heartbeatCleanupInterval = 20 * time.Second
+
 // Connection 跨设备连接数据
 type Connection struct {
 	Token           string
@@ -20,6 +26,7 @@ type Connection struct {
 	WebAuthnOptions any // protocol.CredentialCreation
 	CreatedAt       time.Time
 	ExpiresAt       time.Time
+	LastActiveAt    time.Time // 设备 B 最后活跃时间
 }
 
 // ConnectionStatus 连接状态
@@ -71,6 +78,7 @@ func (s *ConnectionStore) Get(token string) (*Connection, bool) {
 		WebAuthnSession: conn.Session,
 		WebAuthnOptions: conn.Options,
 		ExpiresAt:       conn.ExpiresAt,
+		LastActiveAt:    conn.LastActiveAt,
 	}, true
 }
 
@@ -95,7 +103,7 @@ func (s *ConnectionStore) CleanupExpired() {
 	_, _ = s.repo.CleanupExpired(context.Background())
 }
 
-// StartCleanup 启动定期清理
+// StartCleanup 启动定期清理（过期连接 + 心跳超时）
 func (s *ConnectionStore) StartCleanup(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
@@ -106,7 +114,13 @@ func (s *ConnectionStore) StartCleanup(ctx context.Context, interval time.Durati
 				return
 			case <-ticker.C:
 				_, _ = s.repo.CleanupExpired(ctx)
+				_, _ = s.repo.CleanupInactive(ctx, heartbeatTimeout)
 			}
 		}
 	}()
+}
+
+// UpdateHeartbeat 更新设备 B 心跳
+func (s *ConnectionStore) UpdateHeartbeat(token string) {
+	_ = s.repo.UpdateHeartbeat(context.Background(), token)
 }

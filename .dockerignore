@@ -46,3 +46,4 @@ docker-compose.yml
 *.tar.gz
 *.log
 Makefile
+deploy.sh

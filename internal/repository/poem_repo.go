@@ -20,13 +20,13 @@ func NewPoemRepository(db *pgxpool.Pool) *PoemRepository {
 // Create 创建诗歌
 func (r *PoemRepository) Create(ctx context.Context, poem *model.Poem) error {
 	query := `
-		INSERT INTO poems (title, author, dynasty, content, translation, appreciation, tags, cover_url, status, created_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		INSERT INTO poems (title, author, dynasty, content, translation, appreciation, source, tags, cover_url, status, created_by, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		RETURNING id
 	`
 	return r.db.QueryRow(ctx, query,
 		poem.Title, poem.Author, poem.Dynasty, poem.Content,
-		poem.Translation, poem.Appreciation, poem.Tags, poem.CoverURL,
+		poem.Translation, poem.Appreciation, poem.Source, poem.Tags, poem.CoverURL,
 		poem.Status, poem.CreatedBy, poem.CreatedAt, poem.UpdatedAt,
 	).Scan(&poem.ID)
 }
@@ -63,7 +63,7 @@ func (r *PoemRepository) List(ctx context.Context, page, pageSize int, categoryI
 
 	// 获取列表
 	query := `
-		SELECT id, title, author, dynasty, content, translation, appreciation, category_id, tags, cover_url, status, created_by, created_at, updated_at
+		SELECT id, title, author, dynasty, content, translation, appreciation, source, category_id, tags, cover_url, status, created_by, created_at, updated_at
 		FROM poems ` + where + `
 		ORDER BY created_at DESC
 		LIMIT $` + string(rune('0'+argIdx)) + ` OFFSET $` + string(rune('0'+argIdx+1))
@@ -79,7 +79,7 @@ func (r *PoemRepository) List(ctx context.Context, page, pageSize int, categoryI
 	for rows.Next() {
 		var p model.Poem
 		err := rows.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
-			&p.Translation, &p.Appreciation, &p.CategoryID, &p.Tags, &p.CoverURL,
+			&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.Tags, &p.CoverURL,
 			&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, 0, err
@@ -92,13 +92,13 @@ func (r *PoemRepository) List(ctx context.Context, page, pageSize int, categoryI
 // GetByID 根据 ID 获取诗歌
 func (r *PoemRepository) GetByID(ctx context.Context, id int64) (*model.Poem, error) {
 	query := `
-		SELECT id, title, author, dynasty, content, translation, appreciation, category_id, tags, cover_url, status, created_by, created_at, updated_at
+		SELECT id, title, author, dynasty, content, translation, appreciation, source, category_id, tags, cover_url, status, created_by, created_at, updated_at
 		FROM poems WHERE id = $1
 	`
 	row := r.db.QueryRow(ctx, query, id)
 	var p model.Poem
 	err := row.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
-		&p.Translation, &p.Appreciation, &p.CategoryID, &p.Tags, &p.CoverURL,
+		&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.Tags, &p.CoverURL,
 		&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -122,7 +122,7 @@ func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageS
 
 	// 获取列表
 	query := `
-		SELECT id, title, author, dynasty, content, translation, appreciation, category_id, tags, cover_url, status, created_by, created_at, updated_at
+		SELECT id, title, author, dynasty, content, translation, appreciation, source, category_id, tags, cover_url, status, created_by, created_at, updated_at
 		FROM poems ` + where + `
 		ORDER BY created_at DESC
 		LIMIT $4 OFFSET $5
@@ -139,7 +139,7 @@ func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageS
 	for rows.Next() {
 		var p model.Poem
 		err := rows.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
-			&p.Translation, &p.Appreciation, &p.CategoryID, &p.Tags, &p.CoverURL,
+			&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.Tags, &p.CoverURL,
 			&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, 0, err
@@ -153,14 +153,14 @@ func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageS
 func (r *PoemRepository) GetDailyRecommendation(ctx context.Context) (*model.Poem, error) {
 	// 简单实现：随机获取一首已发布的诗歌
 	query := `
-		SELECT id, title, author, dynasty, content, translation, appreciation, category_id, tags, cover_url, status, created_by, created_at, updated_at
+		SELECT id, title, author, dynasty, content, translation, appreciation, source, category_id, tags, cover_url, status, created_by, created_at, updated_at
 		FROM poems WHERE status = 'published'
 		ORDER BY RANDOM() LIMIT 1
 	`
 	row := r.db.QueryRow(ctx, query)
 	var p model.Poem
 	err := row.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
-		&p.Translation, &p.Appreciation, &p.CategoryID, &p.Tags, &p.CoverURL,
+		&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.Tags, &p.CoverURL,
 		&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -205,7 +205,7 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 	}
 
 	query := fmt.Sprintf(`
-		SELECT p.id, p.title, p.author, p.dynasty, p.content, p.translation, p.appreciation,
+		SELECT p.id, p.title, p.author, p.dynasty, p.content, p.translation, p.appreciation, p.source,
 		       p.category_id, c.name AS category_name, p.tags, p.cover_url, p.status,
 		       p.created_by, p.created_at, p.updated_at
 		FROM poems p
@@ -226,7 +226,7 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 	for rows.Next() {
 		var p PoemWithCategory
 		err := rows.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
-			&p.Translation, &p.Appreciation, &p.CategoryID, &p.CategoryName, &p.Tags, &p.CoverURL,
+			&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.CategoryName, &p.Tags, &p.CoverURL,
 			&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
 		if err != nil {
 			return nil, 0, err
@@ -240,13 +240,13 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 func (r *PoemRepository) Update(ctx context.Context, poem *model.Poem) error {
 	query := `
 		UPDATE poems SET title = $1, author = $2, dynasty = $3, content = $4,
-			translation = $5, appreciation = $6, category_id = $7, tags = $8,
-			cover_url = $9, status = $10, updated_at = $11
-		WHERE id = $12
+			translation = $5, appreciation = $6, source = $7, category_id = $8, tags = $9,
+			cover_url = $10, status = $11, updated_at = $12
+		WHERE id = $13
 	`
 	_, err := r.db.Exec(ctx, query,
 		poem.Title, poem.Author, poem.Dynasty, poem.Content,
-		poem.Translation, poem.Appreciation, poem.CategoryID, poem.Tags,
+		poem.Translation, poem.Appreciation, poem.Source, poem.CategoryID, poem.Tags,
 		poem.CoverURL, poem.Status, poem.UpdatedAt, poem.ID,
 	)
 	return err

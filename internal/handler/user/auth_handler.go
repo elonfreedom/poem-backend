@@ -2,6 +2,8 @@ package user
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -10,9 +12,10 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"poem-backend/internal/middleware"
-	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 	userservice "poem-backend/internal/service/user"
+	"poem-backend/pkg/errorcode"
+	"poem-backend/pkg/response"
 )
 
 // SessionData 存储 WebAuthn 会话数据
@@ -57,15 +60,15 @@ type BeginRegistrationResponse struct {
 }
 
 // BeginRegistration 开始注册
-func (h *AuthHandler) BeginRegistration(c fuego.ContextWithBody[BeginRegistrationRequest]) (*BeginRegistrationResponse, error) {
+func (h *AuthHandler) BeginRegistration(c fuego.ContextWithBody[BeginRegistrationRequest]) (map[string]any, error) {
 	body, err := c.Body()
 	if err != nil {
-		return nil, err
+		return nil, errorcode.BodyMalformed(err).ToFuegoError()
 	}
 
 	options, session, userID, sessionID, err := h.AuthService.BeginRegistration(c.Context(), body.DeviceName)
 	if err != nil {
-		return nil, err
+		return nil, errorcode.Internal("初始化注册", err).ToFuegoError()
 	}
 
 	// 存储会话数据
@@ -74,28 +77,28 @@ func (h *AuthHandler) BeginRegistration(c fuego.ContextWithBody[BeginRegistratio
 		UserID:  userID,
 	})
 
-	return &BeginRegistrationResponse{
+	return response.Success(&BeginRegistrationResponse{
 		Options:   options,
 		Session:   session,
 		UserID:    userID,
 		SessionID: sessionID,
-	}, nil
+	}), nil
 }
 
 // FinishRegistration 完成注册
 // 请求体：标准 RegistrationResponseJSON（id, rawId, response: {clientDataJSON, attestationObject, ...}）
 // 会话 ID：通过 X-Session-ID header 传递
-func (h *AuthHandler) FinishRegistration(c fuego.ContextNoBody) (*usermodel.LoginResponse, error) {
+func (h *AuthHandler) FinishRegistration(c fuego.ContextNoBody) (map[string]any, error) {
 	// 从 header 获取 session_id
 	sessionID := c.Header("X-Session-ID")
 	if sessionID == "" {
-		return nil, fuego.BadRequestError{Title: "missing session", Detail: "X-Session-ID header is required"}
+		return nil, errorcode.ParamRequired("X-Session-ID header").ToFuegoError()
 	}
 
 	// 获取会话数据
 	sessionData, ok := h.SessionStore.Get(sessionID)
 	if !ok {
-		return nil, fuego.BadRequestError{Title: "invalid session", Detail: "会话不存在或已过期"}
+		return nil, errorcode.Newf(errorcode.ErrParamInvalid, "invalid session", "会话不存在或已过期: session_id=%s", sessionID).ToFuegoError()
 	}
 
 	// 删除会话（一次性使用）
@@ -104,12 +107,16 @@ func (h *AuthHandler) FinishRegistration(c fuego.ContextNoBody) (*usermodel.Logi
 	// 使用原始请求体直接传递给 WebAuthn 库
 	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", io.NopCloser(c.Request().Body))
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "failed to create request", Detail: err.Error()}
+		return nil, errorcode.Internal("创建请求", err).ToFuegoError()
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	// 调用服务完成注册
-	return h.AuthService.FinishRegistration(c.Context(), sessionData.UserID, sessionData.Session, req)
+	result, err := h.AuthService.FinishRegistration(c.Context(), sessionData.UserID, sessionData.Session, req)
+	if err != nil {
+		return nil, err
+	}
+	return response.Success(result), nil
 }
 
 // BeginLoginResponse 开始登录响应
@@ -120,7 +127,7 @@ type BeginLoginResponse struct {
 }
 
 // BeginLogin 开始登录（无需请求体）
-func (h *AuthHandler) BeginLogin(c fuego.ContextNoBody) (*BeginLoginResponse, error) {
+func (h *AuthHandler) BeginLogin(c fuego.ContextNoBody) (map[string]any, error) {
 	options, session, sessionID, err := h.AuthService.BeginLogin(c.Context())
 	if err != nil {
 		return nil, err
@@ -131,27 +138,32 @@ func (h *AuthHandler) BeginLogin(c fuego.ContextNoBody) (*BeginLoginResponse, er
 		Session: *session,
 	})
 
-	return &BeginLoginResponse{
+	return response.Success(&BeginLoginResponse{
 		Options:   options,
 		Session:   session,
 		SessionID: sessionID,
-	}, nil
+	}), nil
+}
+
+// authResponseCredential 用于从请求体中提取凭证 ID（仅用于错误信息）
+type authResponseCredential struct {
+	ID string `json:"id"`
 }
 
 // FinishLogin 完成登录
 // 请求体：标准 AuthenticationResponseJSON（id, rawId, response: {clientDataJSON, authenticatorData, signature, ...}）
 // 会话 ID：通过 X-Session-ID header 传递
-func (h *AuthHandler) FinishLogin(c fuego.ContextNoBody) (*usermodel.LoginResponse, error) {
+func (h *AuthHandler) FinishLogin(c fuego.ContextNoBody) (map[string]any, error) {
 	// 从 header 获取 session_id
 	sessionID := c.Header("X-Session-ID")
 	if sessionID == "" {
-		return nil, fuego.BadRequestError{Title: "missing session", Detail: "X-Session-ID header is required"}
+		return nil, errorcode.ParamRequired("X-Session-ID header").ToFuegoError()
 	}
 
 	// 获取会话数据
 	sessionData, ok := h.SessionStore.Get(sessionID)
 	if !ok {
-		return nil, fuego.BadRequestError{Title: "invalid session", Detail: "会话不存在或已过期"}
+		return nil, errorcode.Newf(errorcode.ErrParamInvalid, "invalid session", "会话不存在或已过期: session_id=%s", sessionID).ToFuegoError()
 	}
 
 	// 删除会话（一次性使用）
@@ -160,19 +172,55 @@ func (h *AuthHandler) FinishLogin(c fuego.ContextNoBody) (*usermodel.LoginRespon
 	// 读取原始请求体
 	bodyBytes, err := io.ReadAll(c.Request().Body)
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "failed to read body", Detail: err.Error()}
+		return nil, errorcode.BodyMalformed(err).ToFuegoError()
 	}
 	c.Request().Body.Close()
 
 	// 使用读取到的 body 创建新的请求
 	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", io.NopCloser(bytes.NewReader(bodyBytes)))
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "failed to create request", Detail: err.Error()}
+		return nil, errorcode.Internal("创建请求", err).ToFuegoError()
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	// 调用服务完成登录
-	return h.AuthService.FinishLogin(c.Context(), sessionData.Session, req)
+	result, err := h.AuthService.FinishLogin(c.Context(), sessionData.Session, req)
+	if err != nil {
+		// 提取凭证 ID，附加到错误信息中方便调试
+		var cred authResponseCredential
+		if json.Unmarshal(bodyBytes, &cred) == nil && cred.ID != "" {
+			return nil, errorcode.Newf(errorcode.ErrCredentialNotFound, "登录失败", "凭证验证失败: credential_id=%s, error=%s", cred.ID, err.Error()).ToFuegoError()
+		}
+		return nil, errorcode.Newf(errorcode.ErrCredentialNotFound, "登录失败", "凭证验证失败: %s", err.Error()).ToFuegoError()
+	}
+	return response.Success(result), nil
+}
+
+// getWebAuthnSession 从连接数据中提取 WebAuthn 会话
+// 兼容两种情况：
+//   - 内存缓存中的 *webauthn.SessionData（指针类型，直接返回）
+//   - 数据库反序列化后的 map[string]interface{}（需重新反序列化）
+func getWebAuthnSession(data any) (webauthn.SessionData, error) {
+	switch v := data.(type) {
+	case *webauthn.SessionData:
+		if v == nil {
+			return webauthn.SessionData{}, fmt.Errorf("session data is nil")
+		}
+		return *v, nil
+	case webauthn.SessionData:
+		return v, nil
+	default:
+		// 数据库反序列化后变成 map[string]interface{}，需要重新序列化/反序列化
+		jsonBytes, err := json.Marshal(data)
+		if err != nil {
+			return webauthn.SessionData{}, fmt.Errorf("marshal session data failed: %w", err)
+		}
+		var session webauthn.SessionData
+		if err := json.Unmarshal(jsonBytes, &session); err != nil {
+			return webauthn.SessionData{}, fmt.Errorf("unmarshal session data failed: %w", err)
+		}
+		return session, nil
+	}
 }
 
 func min(a, b int) int {
@@ -198,21 +246,21 @@ type AddDeviceBeginResponse struct {
 
 // AddDeviceBegin 开始添加新设备（设备 A 调用）
 // 生成连接令牌和 WebAuthn 注册选项
-func (h *AuthHandler) AddDeviceBegin(c fuego.ContextWithBody[AddDeviceBeginRequest]) (*AddDeviceBeginResponse, error) {
+func (h *AuthHandler) AddDeviceBegin(c fuego.ContextWithBody[AddDeviceBeginRequest]) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+		return nil, errorcode.Unauthorized().ToFuegoError()
 	}
 
 	body, err := c.Body()
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+		return nil, errorcode.BodyMalformed(err).ToFuegoError()
 	}
 
 	// 调用服务生成连接令牌、WebAuthn 选项和会话
 	token, options, session, expiresAt, err := h.AuthService.BeginAddDevice(c.Context(), userID, body.DeviceName)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "failed to begin add device", Detail: err.Error()}
+		return nil, errorcode.Internal("生成连接令牌", err).ToFuegoError()
 	}
 
 	// 存储连接状态、会话和注册选项
@@ -226,11 +274,11 @@ func (h *AuthHandler) AddDeviceBegin(c fuego.ContextWithBody[AddDeviceBeginReque
 		ExpiresAt:       expiresAt,
 	})
 
-	return &AddDeviceBeginResponse{
+	return response.Success(&AddDeviceBeginResponse{
 		ConnectionToken: token,
 		Options:         options,
 		ExpiresAt:       expiresAt.Format("2006-01-02T15:04:05Z"),
-	}, nil
+	}), nil
 }
 
 // AddDeviceStatusResponse 查询连接状态响应
@@ -240,39 +288,39 @@ type AddDeviceStatusResponse struct {
 }
 
 // AddDeviceStatus 查询连接状态（设备 A 轮询）
-func (h *AuthHandler) AddDeviceStatus(c fuego.ContextNoBody) (*AddDeviceStatusResponse, error) {
+func (h *AuthHandler) AddDeviceStatus(c fuego.ContextNoBody) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+		return nil, errorcode.Unauthorized().ToFuegoError()
 	}
 
 	token := c.QueryParam("token")
 	if token == "" {
-		return nil, fuego.BadRequestError{Title: "missing token", Detail: "token 参数必填"}
+		return nil, errorcode.QueryRequired("token").ToFuegoError()
 	}
 
 	conn, ok := h.ConnectionStore.Get(token)
 	if !ok {
-		return &AddDeviceStatusResponse{Status: string(ConnectionStatusExpired)}, nil
+		return response.Success(AddDeviceStatusResponse{Status: string(ConnectionStatusExpired)}), nil
 	}
 
 	// 验证所有权
 	if conn.UserID != userID {
-		return nil, fuego.ForbiddenError{Title: "forbidden", Detail: "无权访问此连接"}
+		return nil, errorcode.Forbidden(fmt.Sprintf("无权访问此连接: token=%s", token)).ToFuegoError()
 	}
 
 	// 检查是否过期
 	if time.Now().After(conn.ExpiresAt) {
-		return &AddDeviceStatusResponse{Status: string(ConnectionStatusExpired)}, nil
+		return response.Success(AddDeviceStatusResponse{Status: string(ConnectionStatusExpired)}), nil
 	}
 
-	resp := &AddDeviceStatusResponse{
+	resp := AddDeviceStatusResponse{
 		Status: string(conn.Status),
 	}
 	if conn.Status == ConnectionStatusConnected || conn.Status == ConnectionStatusConfirmed {
 		resp.DeviceName = conn.DeviceName
 	}
-	return resp, nil
+	return response.Success(resp), nil
 }
 
 // AddDeviceStatusPublic 查询连接状态（公开接口，设备 B 轮询）
@@ -281,7 +329,7 @@ func (h *AuthHandler) AddDeviceStatus(c fuego.ContextNoBody) (*AddDeviceStatusRe
 func (h *AuthHandler) AddDeviceStatusPublic(c fuego.ContextNoBody) (map[string]any, error) {
 	token := c.QueryParam("token")
 	if token == "" {
-		return nil, fuego.BadRequestError{Title: "missing token", Detail: "token 参数必填"}
+		return nil, errorcode.QueryRequired("token").ToFuegoError()
 	}
 
 	conn, ok := h.ConnectionStore.Get(token)
@@ -290,6 +338,10 @@ func (h *AuthHandler) AddDeviceStatusPublic(c fuego.ContextNoBody) (map[string]a
 		// 检查是否过期
 		if !time.Now().After(conn.ExpiresAt) {
 			status = conn.Status
+			// 设备 B 轮询时更新心跳（waiting/connected 状态才更新）
+			if status == ConnectionStatusWaiting || status == ConnectionStatusConnected {
+				h.ConnectionStore.UpdateHeartbeat(token)
+			}
 		}
 	}
 
@@ -300,11 +352,7 @@ func (h *AuthHandler) AddDeviceStatusPublic(c fuego.ContextNoBody) (map[string]a
 		data["device_name"] = conn.DeviceName
 	}
 
-	return map[string]any{
-		"code":    200,
-		"message": "success",
-		"data":    data,
-	}, nil
+	return response.Success(data), nil
 }
 
 // AddDeviceConnectRequest 设备 B 连接请求
@@ -317,42 +365,39 @@ type AddDeviceConnectRequest struct {
 func (h *AuthHandler) AddDeviceConnect(c fuego.ContextWithBody[AddDeviceConnectRequest]) (map[string]any, error) {
 	body, err := c.Body()
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+		return nil, errorcode.BodyMalformed(err).ToFuegoError()
 	}
 
 	if body.Token == "" {
-		return nil, fuego.BadRequestError{Title: "missing token", Detail: "token 必填"}
+		return nil, errorcode.ParamRequired("token").ToFuegoError()
 	}
 
 	conn, ok := h.ConnectionStore.Get(body.Token)
 	if !ok {
-		return nil, fuego.BadRequestError{Title: "invalid token", Detail: "连接令牌无效或已过期"}
+		return nil, errorcode.ConnectionNotFound(body.Token).ToFuegoError()
 	}
 
 	if time.Now().After(conn.ExpiresAt) {
-		return nil, fuego.BadRequestError{Title: "expired", Detail: "连接已过期"}
+		return nil, errorcode.ConnectionExpired(body.Token).ToFuegoError()
 	}
 
 	if conn.Status != ConnectionStatusWaiting {
-		return nil, fuego.BadRequestError{Title: "invalid status", Detail: "连接状态错误"}
+		return nil, errorcode.ConnectionStatusInvalid("waiting", string(conn.Status)).ToFuegoError()
 	}
 
-	// 更新连接状态为已连接
+	// 更新连接状态为已连接，同时更新心跳
 	h.ConnectionStore.Update(body.Token, func(c *Connection) {
 		c.Status = ConnectionStatusConnected
 		c.DeviceName = body.DeviceName
+		c.LastActiveAt = time.Now()
 	})
 
 	// 返回 WebAuthn 注册选项（设备 B 需要此数据创建 credential）
-	return map[string]any{
-		"code":    200,
-		"message": "success",
-		"data": map[string]any{
-			"status":  string(ConnectionStatusConnected),
-			"message": "已连接，等待设备 A 确认",
-			"options": conn.WebAuthnOptions, // protocol.CredentialCreation（含 publicKey）
-		},
-	}, nil
+	return response.Success(map[string]any{
+		"status":  string(ConnectionStatusConnected),
+		"message": "已连接，等待设备 A 确认",
+		"options": conn.WebAuthnOptions, // protocol.CredentialCreation（含 publicKey）
+	}), nil
 }
 
 // AddDeviceConfirmRequest 确认授权请求
@@ -362,42 +407,82 @@ type AddDeviceConfirmRequest struct {
 }
 
 // AddDeviceConfirm 设备 A 确认/拒绝授权
-func (h *AuthHandler) AddDeviceConfirm(c fuego.ContextWithBody[AddDeviceConfirmRequest]) (map[string]string, error) {
+func (h *AuthHandler) AddDeviceConfirm(c fuego.ContextWithBody[AddDeviceConfirmRequest]) (map[string]any, error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+		return nil, errorcode.Unauthorized().ToFuegoError()
 	}
 
 	body, err := c.Body()
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+		return nil, errorcode.BodyMalformed(err).ToFuegoError()
+	}
+
+	if body.Token == "" {
+		return nil, errorcode.ParamRequired("connection_token").ToFuegoError()
 	}
 
 	conn, ok := h.ConnectionStore.Get(body.Token)
 	if !ok {
-		return nil, fuego.BadRequestError{Title: "invalid token", Detail: "连接令牌无效或已过期"}
+		return nil, errorcode.ConnectionNotFound(body.Token).ToFuegoError()
 	}
 
 	if conn.UserID != userID {
-		return nil, fuego.ForbiddenError{Title: "forbidden", Detail: "无权操作此连接"}
+		return nil, errorcode.Forbidden(fmt.Sprintf("无权操作此连接: token=%s", body.Token)).ToFuegoError()
 	}
 
 	if conn.Status != ConnectionStatusConnected {
-		return nil, fuego.BadRequestError{Title: "invalid status", Detail: "连接状态错误，无法确认"}
+		return nil, errorcode.ConnectionStatusInvalid("connected", string(conn.Status)).ToFuegoError()
 	}
 
 	if body.Confirmed {
 		h.ConnectionStore.Update(body.Token, func(c *Connection) {
 			c.Status = ConnectionStatusConfirmed
 		})
-		return map[string]string{"status": "confirmed", "message": "已确认授权"}, nil
+		return response.Success(map[string]string{"status": "confirmed", "message": "已确认授权"}), nil
 	}
 
 	// 拒绝
 	h.ConnectionStore.Update(body.Token, func(c *Connection) {
 		c.Status = ConnectionStatusRejected
 	})
-	return map[string]string{"status": "rejected", "message": "已拒绝"}, nil
+	return response.Success(map[string]string{"status": "rejected", "message": "已拒绝"}), nil
+}
+
+// AddDeviceRejectRequest 设备 B 拒绝/放弃请求（公开接口）
+type AddDeviceRejectRequest struct {
+	Token string `json:"token" description:"连接令牌"`
+}
+
+// AddDeviceReject 设备 B 主动放弃创建 Passkey（公开接口）
+// 无需认证，设备 B 点击"取消"或关闭页面时调用
+func (h *AuthHandler) AddDeviceReject(c fuego.ContextWithBody[AddDeviceRejectRequest]) (map[string]any, error) {
+	body, err := c.Body()
+	if err != nil {
+		return nil, errorcode.BodyMalformed(err).ToFuegoError()
+	}
+
+	if body.Token == "" {
+		return nil, errorcode.ParamRequired("token").ToFuegoError()
+	}
+
+	conn, ok := h.ConnectionStore.Get(body.Token)
+	if !ok {
+		return nil, errorcode.ConnectionNotFound(body.Token).ToFuegoError()
+	}
+
+	// waiting、connected、confirmed 状态都可以拒绝
+	// confirmed 后设备 B 仍可能因 Passkey 冲突需要取消
+	if conn.Status != ConnectionStatusWaiting && conn.Status != ConnectionStatusConnected && conn.Status != ConnectionStatusConfirmed {
+		return nil, errorcode.ConnectionStatusInvalid("waiting/connected/confirmed", string(conn.Status)).ToFuegoError()
+	}
+
+	// 更新状态为 rejected
+	h.ConnectionStore.Update(body.Token, func(c *Connection) {
+		c.Status = ConnectionStatusRejected
+	})
+
+	return response.Success(map[string]string{"status": "rejected", "message": "设备 B 已取消"}), nil
 }
 
 // AddDeviceFinishRequest 新设备完成注册请求
@@ -408,47 +493,51 @@ type AddDeviceFinishRequest struct {
 }
 
 // AddDeviceFinish 新设备完成注册（设备 B 调用）
-func (h *AuthHandler) AddDeviceFinish(c fuego.ContextWithBody[AddDeviceFinishRequest]) (*usermodel.LoginResponse, error) {
+func (h *AuthHandler) AddDeviceFinish(c fuego.ContextWithBody[AddDeviceFinishRequest]) (map[string]any, error) {
 	body, err := c.Body()
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+		return nil, errorcode.BodyMalformed(err).ToFuegoError()
 	}
 
 	if body.Token == "" {
-		return nil, fuego.BadRequestError{Title: "missing token", Detail: "connection_token 必填"}
+		return nil, errorcode.ParamRequired("connection_token").ToFuegoError()
 	}
 
 	conn, ok := h.ConnectionStore.Get(body.Token)
 	if !ok {
-		return nil, fuego.BadRequestError{Title: "invalid token", Detail: "连接令牌无效或已过期"}
+		return nil, errorcode.ConnectionNotFound(body.Token).ToFuegoError()
 	}
 
 	if conn.Status != ConnectionStatusConfirmed {
-		return nil, fuego.BadRequestError{Title: "not confirmed", Detail: "设备 A 尚未确认授权"}
+		return nil, errorcode.NotConfirmed(string(conn.Status)).ToFuegoError()
 	}
 
 	if time.Now().After(conn.ExpiresAt) {
-		return nil, fuego.BadRequestError{Title: "expired", Detail: "连接已过期"}
+		return nil, errorcode.ConnectionExpired(body.Token).ToFuegoError()
 	}
 
-	// 获取 WebAuthn 会话数据（指针类型）
-	sessionPtr, ok := conn.WebAuthnSession.(*webauthn.SessionData)
-	if !ok || sessionPtr == nil {
-		return nil, fuego.InternalServerError{Title: "invalid session", Detail: "WebAuthn 会话数据无效"}
-	}
-	session := *sessionPtr
-
-	// 使用原始请求体创建一个新的 http.Request（WebAuthn 库需要解析 body）
-	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", io.NopCloser(c.Request().Body))
+	// 获取 WebAuthn 会话数据（兼容内存指针和数据库反序列化后的 map）
+	session, err := getWebAuthnSession(conn.WebAuthnSession)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "failed to create request", Detail: err.Error()}
+		return nil, errorcode.Internal("获取 WebAuthn 会话", err).ToFuegoError()
+	}
+
+	// 从解析后的 credential 字段重建 WebAuthn 库需要的请求体
+	// 注意：c.Body() 已消费原始请求体，不能再用 c.Request().Body
+	credentialJSON, err := json.Marshal(body.Credential)
+	if err != nil {
+		return nil, errorcode.Internal("序列化凭证数据", err).ToFuegoError()
+	}
+	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, "", bytes.NewReader(credentialJSON))
+	if err != nil {
+		return nil, errorcode.Internal("创建请求", err).ToFuegoError()
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	// 完成注册，验证 credential 并保存 passkey
 	result, err := h.AuthService.FinishAddDevice(c.Context(), conn.UserID, session, req, body.DeviceName)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "failed to finish registration", Detail: err.Error()}
+		return nil, errorcode.Internal("Passkey 注册", err).ToFuegoError()
 	}
 
 	// 标记连接完成
@@ -456,5 +545,5 @@ func (h *AuthHandler) AddDeviceFinish(c fuego.ContextWithBody[AddDeviceFinishReq
 		c.Status = ConnectionStatusCompleted
 	})
 
-	return result, nil
+	return response.Success(result), nil
 }
