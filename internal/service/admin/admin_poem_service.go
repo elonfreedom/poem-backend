@@ -7,6 +7,7 @@ import (
 	"poem-backend/internal/model"
 	adminmodel "poem-backend/internal/model/admin"
 	"poem-backend/internal/repository"
+	"poem-backend/pkg/convert"
 	"poem-backend/pkg/pinyin"
 	"poem-backend/pkg/response"
 )
@@ -63,9 +64,19 @@ func (s *AdminPoemService) Create(ctx context.Context, req *adminmodel.AdminPoem
 	if contentPinyin == "" {
 		contentPinyin = pinyin.ToPinyinLines(req.Content)
 	}
-	authorPinyin := req.AuthorPinyin
-	if authorPinyin == "" {
-		authorPinyin = pinyin.ToPinyin(req.Author)
+
+	// 简繁体双向转换：填一端自动生成另一端，都填则以用户输入为准
+	titleSC := req.TitleSC
+	if titleSC == "" && req.Title != "" {
+		titleSC = convert.MustTraditionalToSimplified(req.Title)
+	}
+	authorSC := req.AuthorSC
+	if authorSC == "" && req.Author != "" {
+		authorSC = convert.MustTraditionalToSimplified(req.Author)
+	}
+	contentSC := req.ContentSC
+	if contentSC == "" && req.Content != "" {
+		contentSC = convert.MustTraditionalToSimplified(req.Content)
 	}
 
 	poem := &model.Poem{
@@ -85,7 +96,9 @@ func (s *AdminPoemService) Create(ctx context.Context, req *adminmodel.AdminPoem
 		UpdatedAt:     now,
 		TitlePinyin:   titlePinyin,
 		ContentPinyin: contentPinyin,
-		AuthorPinyin:  authorPinyin,
+		TitleSC:       titleSC,
+		AuthorSC:      authorSC,
+		ContentSC:     contentSC,
 	}
 	if poem.Status == "" {
 		poem.Status = "draft"
@@ -131,10 +144,15 @@ func (s *AdminPoemService) Update(ctx context.Context, id int64, req *adminmodel
 	} else {
 		poem.ContentPinyin = pinyin.ToPinyinLines(req.Content)
 	}
-	if req.AuthorPinyin != "" {
-		poem.AuthorPinyin = req.AuthorPinyin
-	} else {
-		poem.AuthorPinyin = pinyin.ToPinyin(req.Author)
+		// 简繁体双向转换：填一端自动生成另一端，都填则以用户输入为准
+	if req.TitleSC == "" && req.Title != "" {
+		poem.TitleSC = convert.MustTraditionalToSimplified(req.Title)
+	}
+	if req.AuthorSC == "" && req.Author != "" {
+		poem.AuthorSC = convert.MustTraditionalToSimplified(req.Author)
+	}
+	if req.ContentSC == "" && req.Content != "" {
+		poem.ContentSC = convert.MustTraditionalToSimplified(req.Content)
 	}
 
 	poem.UpdatedAt = time.Now()
@@ -157,6 +175,12 @@ func (s *AdminPoemService) BatchUpdateStatus(ctx context.Context, ids []int64, s
 	return s.poemRepo.BatchUpdateStatus(ctx, ids, status)
 }
 
+// EnsureSimplifiedForAllPoems 为存量诗歌批量生成简体（繁体 → 简体）
+// 返回成功处理的记录数
+func (s *AdminPoemService) EnsureSimplifiedForAllPoems(ctx context.Context) (int, error) {
+	return s.poemRepo.EnsureSimplifiedForAllPoems(ctx)
+}
+
 // toAdminPoemResponse 转换 Poem 为 AdminPoemResponse
 func toAdminPoemResponse(p model.Poem, categoryName *string) adminmodel.AdminPoemResponse {
 	resp := adminmodel.AdminPoemResponse{
@@ -177,7 +201,9 @@ func toAdminPoemResponse(p model.Poem, categoryName *string) adminmodel.AdminPoe
 		UpdatedAt:     p.UpdatedAt,
 		TitlePinyin:   p.TitlePinyin,
 		ContentPinyin: p.ContentPinyin,
-		AuthorPinyin:  p.AuthorPinyin,
+		TitleSC:       p.TitleSC,
+		AuthorSC:      p.AuthorSC,
+		ContentSC:     p.ContentSC,
 	}
 	if categoryName != nil {
 		resp.CategoryName = *categoryName

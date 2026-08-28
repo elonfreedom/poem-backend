@@ -16,7 +16,10 @@ type PoemResponse struct {
 	// 拼音字段
 	TitlePinyin   string `json:"title_pinyin" description:"标题拼音（带声调）"`
 	ContentPinyin string `json:"content_pinyin" description:"内容拼音（带声调）"`
-	AuthorPinyin  string `json:"author_pinyin" description:"作者拼音（带声调）"`
+	// 简体字段
+	TitleSC   string `json:"title_sc" description:"标题（简体）"`
+	AuthorSC  string `json:"author_sc" description:"作者（简体）"`
+	ContentSC string `json:"content_sc" description:"内容（简体）"`
 }
 
 // PoemListItem 诗歌列表项

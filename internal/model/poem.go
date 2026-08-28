@@ -22,7 +22,10 @@ type Poem struct {
 	CreatedAt     time.Time `json:"created_at" db:"created_at" description:"创建时间"`
 	UpdatedAt     time.Time `json:"updated_at" db:"updated_at" description:"更新时间"`
 	// 拼音字段（可手动校正多音字）
-	TitlePinyin    string `json:"title_pinyin" db:"title_pinyin" description:"标题拼音（带声调）"`
-	ContentPinyin  string `json:"content_pinyin" db:"content_pinyin" description:"内容拼音（带声调）"`
-	AuthorPinyin   string `json:"author_pinyin" db:"author_pinyin" description:"作者拼音（带声调）"`
+	TitlePinyin   string `json:"title_pinyin" db:"title_pinyin" description:"标题拼音（带声调）"`
+	ContentPinyin string `json:"content_pinyin" db:"content_pinyin" description:"内容拼音（带声调）"`
+	// 简体字段（由繁体原文自动生成，供前端切换阅读）
+	TitleSC   string `json:"title_sc" db:"title_sc" description:"标题（简体）"`
+	AuthorSC  string `json:"author_sc" db:"author_sc" description:"作者（简体）"`
+	ContentSC string `json:"content_sc" db:"content_sc" description:"内容（简体）"`
 }

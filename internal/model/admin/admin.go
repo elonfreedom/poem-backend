@@ -68,7 +68,10 @@ type AdminPoemResponse struct {
 	// 拼音字段（可手动校正多音字）
 	TitlePinyin   string `json:"title_pinyin" description:"标题拼音（带声调）"`
 	ContentPinyin string `json:"content_pinyin" description:"内容拼音（带声调）"`
-	AuthorPinyin  string `json:"author_pinyin" description:"作者拼音（带声调）"`
+	// 简体字段（由繁体自动生成，可手动校正）
+	TitleSC   string `json:"title_sc" description:"标题（简体）"`
+	AuthorSC  string `json:"author_sc" description:"作者（简体）"`
+	ContentSC string `json:"content_sc" description:"内容（简体）"`
 }
 
 // AdminPoemCreateRequest 创建诗歌请求
@@ -87,7 +90,10 @@ type AdminPoemCreateRequest struct {
 	// 拼音字段（可手动校正多音字，留空则自动生成）
 	TitlePinyin   string `json:"title_pinyin,omitempty" description:"标题拼音（带声调）"`
 	ContentPinyin string `json:"content_pinyin,omitempty" description:"内容拼音（带声调）"`
-	AuthorPinyin  string `json:"author_pinyin,omitempty" description:"作者拼音（带声调）"`
+	// 简体字段（由繁体自动生成，可手动校正，留空则自动生成）
+	TitleSC   string `json:"title_sc,omitempty" description:"标题（简体）"`
+	AuthorSC  string `json:"author_sc,omitempty" description:"作者（简体）"`
+	ContentSC string `json:"content_sc,omitempty" description:"内容（简体）"`
 }
 
 // AdminPoemUpdateRequest 更新诗歌请求
@@ -106,7 +112,10 @@ type AdminPoemUpdateRequest struct {
 	// 拼音字段（可手动校正多音字，留空则自动生成）
 	TitlePinyin   string `json:"title_pinyin,omitempty" description:"标题拼音（带声调）"`
 	ContentPinyin string `json:"content_pinyin,omitempty" description:"内容拼音（带声调）"`
-	AuthorPinyin  string `json:"author_pinyin,omitempty" description:"作者拼音（带声调）"`
+	// 简体字段（由繁体自动生成，可手动校正，留空则自动生成）
+	TitleSC   string `json:"title_sc,omitempty" description:"标题（简体）"`
+	AuthorSC  string `json:"author_sc,omitempty" description:"作者（简体）"`
+	ContentSC string `json:"content_sc,omitempty" description:"内容（简体）"`
 }
 
 // AdminPoemUpdateStatusRequest 更新诗歌状态请求

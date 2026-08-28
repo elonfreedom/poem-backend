@@ -1,0 +1,4 @@
+-- 回滚：删除简体字段
+ALTER TABLE poems DROP COLUMN IF EXISTS title_sc;
+ALTER TABLE poems DROP COLUMN IF EXISTS author_sc;
+ALTER TABLE poems DROP COLUMN IF EXISTS content_sc;

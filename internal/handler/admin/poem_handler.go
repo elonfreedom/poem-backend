@@ -238,6 +238,21 @@ func (h *PoemHandler) UpdateStatus(c fuego.ContextWithBody[adminmodel.AdminPoemU
 	return response.OK[any](nil), nil
 }
 
+// BatchConvertSimplifiedResponse 批量生成简体响应
+type BatchConvertSimplifiedResponse struct {
+	Processed int `json:"processed" description:"成功处理记录数"`
+}
+
+// BatchConvertSimplified 一键为存量诗歌生成简体（繁体 → 简体）
+// 扫描 title_sc 为空的记录，自动生成 title_sc、author_sc、content_sc
+func (h *PoemHandler) BatchConvertSimplified(c fuego.ContextNoBody) (*response.APIResponse[BatchConvertSimplifiedResponse], error) {
+	processed, err := h.poemService.EnsureSimplifiedForAllPoems(c.Context())
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "批量生成简体失败", Detail: err.Error()}
+	}
+	return response.OK(BatchConvertSimplifiedResponse{Processed: processed}), nil
+}
+
 // ImportResponse 批量导入响应
 type ImportResponse struct {
 	Total   int           `json:"total" description:"总条数"`

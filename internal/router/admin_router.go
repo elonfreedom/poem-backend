@@ -128,6 +128,11 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionOverrideDescription("批量更新多首诗歌的状态"),
 		fuego.OptionTags("诗歌管理"),
 	)
+	fuego.Post(adminMgmt, "/poems/batch/convert-simplified", poemHandler.BatchConvertSimplified,
+		fuego.OptionSummary("批量生成简体"),
+		fuego.OptionOverrideDescription("一键为存量诗歌自动生成简体（繁体→简体），扫描 title_sc 为空的记录进行处理"),
+		fuego.OptionTags("诗歌管理"),
+	)
 
 	// [分类管理]
 	fuego.Get(adminMgmt, "/categories", categoryHandler.List,

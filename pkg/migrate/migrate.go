@@ -26,7 +26,9 @@ var expectedSchema = []struct {
 }{
 	{"poems", "title_pinyin"},
 	{"poems", "content_pinyin"},
-	{"poems", "author_pinyin"},
+	{"poems", "title_sc"},
+	{"poems", "author_sc"},
+	{"poems", "content_sc"},
 	{"passkeys", "flags"},
 	{"shared_plans", "id"},
 	{"plan_subscriptions", "id"},

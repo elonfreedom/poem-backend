@@ -73,7 +73,9 @@ func (s *PoemService) GetByID(ctx context.Context, poemID int64, userID *string)
 		IsFavorited:   isFavorited,
 		TitlePinyin:   poem.TitlePinyin,
 		ContentPinyin: poem.ContentPinyin,
-		AuthorPinyin:  poem.AuthorPinyin,
+		TitleSC:       poem.TitleSC,
+		AuthorSC:      poem.AuthorSC,
+		ContentSC:     poem.ContentSC,
 	}
 
 	return &resp, nil
@@ -125,7 +127,9 @@ func (s *PoemService) GetDailyRecommendation(ctx context.Context) (*usermodel.Po
 		CoverURL:      poem.CoverURL,
 		TitlePinyin:   poem.TitlePinyin,
 		ContentPinyin: poem.ContentPinyin,
-		AuthorPinyin:  poem.AuthorPinyin,
+		TitleSC:       poem.TitleSC,
+		AuthorSC:      poem.AuthorSC,
+		ContentSC:     poem.ContentSC,
 	}
 
 	return &resp, nil

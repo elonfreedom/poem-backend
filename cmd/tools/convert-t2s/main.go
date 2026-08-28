@@ -1,4 +1,4 @@
-// gen-pinyin 批量为已有诗歌生成拼音
+// convert-t2s 批量为已有诗歌生成简体（繁体 → 简体）
 // 支持两种模式：
 //   - 默认：直接连接数据库并更新
 //   - --sql-only：输出 SQL 脚本到 stdout（用于无法直接执行二进制的情况）
@@ -13,7 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"poem-backend/pkg/pinyin"
+	"poem-backend/pkg/convert"
 )
 
 func main() {
@@ -25,7 +25,6 @@ func main() {
 
 	ctx := context.Background()
 
-	// sql-only 模式：输出 SQL 并退出
 	if *sqlOnly {
 		if err := generateSQL(ctx, *dsn, *dryRun, *batchSize); err != nil {
 			log.Fatalf("生成 SQL 失败: %v", err)
@@ -33,13 +32,11 @@ func main() {
 		return
 	}
 
-	// 默认模式：直接连接数据库并更新
 	if err := updateDatabase(ctx, *dsn, *dryRun, *batchSize); err != nil {
 		log.Fatalf("更新失败: %v", err)
 	}
 }
 
-// getDSN 获取数据库连接字符串
 func getDSN(dsn string) string {
 	if dsn != "" {
 		return dsn
@@ -54,7 +51,6 @@ func getDSN(dsn string) string {
 	)
 }
 
-// updateDatabase 直接连接数据库并更新拼音字段
 func updateDatabase(ctx context.Context, dsn string, dryRun bool, batchSize int) error {
 	db, err := pgxpool.New(ctx, getDSN(dsn))
 	if err != nil {
@@ -68,29 +64,51 @@ func updateDatabase(ctx context.Context, dsn string, dryRun bool, batchSize int)
 	}
 
 	if len(poems) == 0 {
-		fmt.Println("没有需要生成拼音的记录")
+		fmt.Println("没有需要生成简体的记录")
 		return nil
 	}
 
-	fmt.Printf("找到 %d 条需要生成拼音的记录\n", len(poems))
+	fmt.Printf("找到 %d 条需要生成简体的记录\n", len(poems))
 
 	if dryRun {
 		fmt.Println("【预览模式】不修改数据库")
 		for _, p := range poems {
-			fmt.Printf("ID=%d: %s → %s\n", p.id, p.title, pinyin.ToPinyin(p.title))
+			titleSC, _ := convert.TraditionalToSimplified(p.title)
+			authorSC, _ := convert.TraditionalToSimplified(p.author)
+			contentSC, _ := convert.TraditionalToSimplified(p.content)
+			fmt.Printf("ID=%d: %s → %s\n", p.id, p.title, titleSC)
+			if authorSC != "" {
+				fmt.Printf("  作者: %s → %s\n", p.author, authorSC)
+			}
+			if contentSC != "" {
+				fmt.Printf("  正文: %.30s → %.30s\n", p.content, contentSC)
+			}
 		}
 		return nil
 	}
 
 	successCount := 0
 	for _, p := range poems {
-		titlePinyin := pinyin.ToPinyin(p.title)
-		contentPinyin := pinyin.ToPinyinLines(p.content)
+		titleSC, err := convert.TraditionalToSimplified(p.title)
+		if err != nil {
+			log.Printf("转换 ID=%d 标题失败: %v", p.id, err)
+			continue
+		}
+		authorSC, err := convert.TraditionalToSimplified(p.author)
+		if err != nil {
+			log.Printf("转换 ID=%d 作者失败: %v", p.id, err)
+			continue
+		}
+		contentSC, err := convert.TraditionalToSimplified(p.content)
+		if err != nil {
+			log.Printf("转换 ID=%d 正文失败: %v", p.id, err)
+			continue
+		}
 
-		_, err := db.Exec(ctx, `
-			UPDATE poems SET title_pinyin = $1, content_pinyin = $2, updated_at = NOW()
-			WHERE id = $3
-		`, titlePinyin, contentPinyin, p.id)
+		_, err = db.Exec(ctx, `
+			UPDATE poems SET title_sc = $1, author_sc = $2, content_sc = $3, updated_at = NOW()
+			WHERE id = $4
+		`, titleSC, authorSC, contentSC, p.id)
 		if err != nil {
 			log.Printf("更新 ID=%d 失败: %v", p.id, err)
 			continue
@@ -102,7 +120,6 @@ func updateDatabase(ctx context.Context, dsn string, dryRun bool, batchSize int)
 	return nil
 }
 
-// generateSQL 输出 SQL 更新语句到 stdout
 func generateSQL(ctx context.Context, dsn string, dryRun bool, batchSize int) error {
 	db, err := pgxpool.New(ctx, getDSN(dsn))
 	if err != nil {
@@ -116,32 +133,46 @@ func generateSQL(ctx context.Context, dsn string, dryRun bool, batchSize int) er
 	}
 
 	if len(poems) == 0 {
-		fmt.Println("-- 没有需要生成拼音的记录")
+		fmt.Println("-- 没有需要生成简体的记录")
 		return nil
 	}
 
-	fmt.Printf("-- 共 %d 条记录需要生成拼音\n", len(poems))
+	fmt.Printf("-- 共 %d 条记录需要生成简体\n", len(poems))
 
 	if dryRun {
 		fmt.Println("-- 【预览模式】")
 		for _, p := range poems {
-			fmt.Printf("-- ID=%d: %s → %s\n", p.id, p.title, pinyin.ToPinyin(p.title))
+			titleSC, _ := convert.TraditionalToSimplified(p.title)
+		authorSC, _ := convert.TraditionalToSimplified(p.author)
+			fmt.Printf("-- ID=%d: %s → %s, 作者: %s → %s\n", p.id, p.title, titleSC, p.author, authorSC)
 		}
 		return nil
 	}
 
 	for _, p := range poems {
-		titlePinyin := pinyin.ToPinyin(p.title)
-		contentPinyin := pinyin.ToPinyinLines(p.content)
+		titleSC, err := convert.TraditionalToSimplified(p.title)
+		if err != nil {
+			log.Printf("-- 转换 ID=%d 标题失败: %v", p.id, err)
+			continue
+		}
+		authorSC, err := convert.TraditionalToSimplified(p.author)
+		if err != nil {
+			log.Printf("-- 转换 ID=%d 作者失败: %v", p.id, err)
+			continue
+		}
+		contentSC, err := convert.TraditionalToSimplified(p.content)
+		if err != nil {
+			log.Printf("-- 转换 ID=%d 正文失败: %v", p.id, err)
+			continue
+		}
 
-		fmt.Printf("UPDATE poems SET title_pinyin = '%s', content_pinyin = '%s', updated_at = NOW() WHERE id = %d;\n",
-			escapeSQL(titlePinyin), escapeSQL(contentPinyin), p.id)
+		fmt.Printf("UPDATE poems SET title_sc = '%s', author_sc = '%s', content_sc = '%s', updated_at = NOW() WHERE id = %d;\n",
+			escapeSQL(titleSC), escapeSQL(authorSC), escapeSQL(contentSC), p.id)
 	}
 
 	return nil
 }
 
-// poemData 诗歌数据
 type poemData struct {
 	id      int64
 	title   string
@@ -149,11 +180,10 @@ type poemData struct {
 	content string
 }
 
-// fetchPoems 查询需要生成拼音的记录
 func fetchPoems(ctx context.Context, db *pgxpool.Pool, batchSize int) ([]poemData, error) {
 	rows, err := db.Query(ctx, `
 		SELECT id, title, author, content FROM poems
-		WHERE title_pinyin = '' OR title_pinyin IS NULL
+		WHERE title_sc = '' OR title_sc IS NULL
 		ORDER BY id
 		LIMIT $1
 	`, batchSize)
@@ -173,7 +203,6 @@ func fetchPoems(ctx context.Context, db *pgxpool.Pool, batchSize int) ([]poemDat
 	return poems, rows.Err()
 }
 
-// escapeSQL 转义 SQL 字符串中的单引号
 func escapeSQL(s string) string {
 	result := ""
 	for _, c := range s {
