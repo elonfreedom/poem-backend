@@ -1,0 +1,48 @@
+package tools
+
+import (
+	"github.com/go-fuego/fuego"
+
+	adminmodel "poem-backend/internal/model/admin"
+	"poem-backend/internal/service/admin"
+	"poem-backend/pkg/response"
+)
+
+// ToolsHandler 工具模块处理器
+type ToolsHandler struct {
+	poemService  *admin.AdminPoemService
+	authorService *admin.AdminAuthorService
+}
+
+// NewToolsHandler 创建工具模块处理器
+func NewToolsHandler(poemService *admin.AdminPoemService, authorService *admin.AdminAuthorService) *ToolsHandler {
+	return &ToolsHandler{
+		poemService:   poemService,
+		authorService: authorService,
+	}
+}
+
+// BatchConvertSimplifiedResponse 批量生成简体响应
+type BatchConvertSimplifiedResponse struct {
+	Processed int `json:"processed" description:"成功处理记录数"`
+}
+
+// BatchConvertSimplified 一键为存量诗歌生成简体（繁体 → 简体）
+// 扫描 title_sc/author_sc/content_sc 为空的记录，自动生成简体字段
+func (h *ToolsHandler) BatchConvertSimplified(c fuego.ContextNoBody) (*response.APIResponse[BatchConvertSimplifiedResponse], error) {
+	processed, err := h.poemService.EnsureSimplifiedForAllPoems(c.Context())
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "批量生成简体失败", Detail: err.Error()}
+	}
+	return response.OK(BatchConvertSimplifiedResponse{Processed: processed}), nil
+}
+
+// GenerateAuthorsFromPoems 从已有诗歌作品中提取所有不重复的作者名，自动创建作者记录
+// 扫描 poems 表的 author 字段，去重后插入 authors 表（跳过已存在的）
+func (h *ToolsHandler) GenerateAuthorsFromPoems(c fuego.ContextNoBody) (*response.APIResponse[adminmodel.AdminToolGenerateAuthorsResponse], error) {
+	result, err := h.authorService.GenerateAuthorsFromPoems(c.Context())
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "提取作者失败", Detail: err.Error()}
+	}
+	return response.OK(*result), nil
+}

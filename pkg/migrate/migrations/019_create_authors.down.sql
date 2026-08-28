@@ -1,0 +1,2 @@
+ALTER TABLE poems DROP COLUMN IF EXISTS author_id;
+DROP TABLE IF EXISTS authors;

@@ -15,6 +15,7 @@ type Poem struct {
 	Appreciation  string    `json:"appreciation" db:"appreciation" description:"赏析"`
 	Source        string    `json:"source" db:"source" description:"来源（如《唐诗三百首》）"`
 	CategoryID    *int64    `json:"category_id,omitempty" db:"category_id" description:"分类ID"`
+	AuthorID      *int64    `json:"author_id,omitempty" db:"author_id" description:"作者ID（关联 authors 表）"`
 	Tags          []string  `json:"tags" db:"tags" description:"标签列表"`
 	CoverURL      string    `json:"cover_url" db:"cover_url" description:"封面图片URL"`
 	Status        string    `json:"status" db:"status" description:"状态: draft, published, archived"`

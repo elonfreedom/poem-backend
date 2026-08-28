@@ -20,8 +20,13 @@ func NewAdminPoemService(poemRepo *repository.PoemRepository) *AdminPoemService 
 	return &AdminPoemService{poemRepo: poemRepo}
 }
 
+// ExistsByTitleAuthorFirstLine 检查标题+作者+正文首句是否已存在
+func (s *AdminPoemService) ExistsByTitleAuthorFirstLine(ctx context.Context, title, author, firstLine string) (bool, error) {
+	return s.poemRepo.ExistsByTitleAuthorFirstLine(ctx, title, author, firstLine)
+}
+
 // List 分页获取诗歌列表
-func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword string) (*response.PageData[adminmodel.AdminPoemResponse], error) {
+func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword, dynasty string, authorID *int64) (*response.PageData[adminmodel.AdminPoemResponse], error) {
 	if page < 1 {
 		page = 1
 	}
@@ -29,7 +34,7 @@ func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categor
 		pageSize = 20
 	}
 
-	poems, total, err := s.poemRepo.ListAll(ctx, page, pageSize, categoryID, status, keyword)
+	poems, total, err := s.poemRepo.ListAll(ctx, page, pageSize, categoryID, status, keyword, dynasty, authorID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,6 +93,7 @@ func (s *AdminPoemService) Create(ctx context.Context, req *adminmodel.AdminPoem
 		Appreciation:  req.Appreciation,
 		Source:        req.Source,
 		CategoryID:    req.CategoryID,
+		AuthorID:      req.AuthorID,
 		Tags:          req.Tags,
 		CoverURL:      req.CoverURL,
 		Status:        req.Status,
@@ -127,6 +133,7 @@ func (s *AdminPoemService) Update(ctx context.Context, id int64, req *adminmodel
 	poem.Appreciation = req.Appreciation
 	poem.Source = req.Source
 	poem.CategoryID = req.CategoryID
+	poem.AuthorID = req.AuthorID
 	poem.Tags = req.Tags
 	poem.CoverURL = req.CoverURL
 	if req.Status != "" {
@@ -193,6 +200,7 @@ func toAdminPoemResponse(p model.Poem, categoryName *string) adminmodel.AdminPoe
 		Appreciation:  p.Appreciation,
 		Source:        p.Source,
 		CategoryID:    p.CategoryID,
+		AuthorID:      p.AuthorID,
 		Tags:          p.Tags,
 		CoverURL:      p.CoverURL,
 		Status:        p.Status,

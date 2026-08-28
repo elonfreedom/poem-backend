@@ -58,6 +58,7 @@ type AdminPoemResponse struct {
 	Appreciation  string    `json:"appreciation,omitempty" description:"赏析"`
 	Source        string    `json:"source,omitempty" description:"来源（如《唐诗三百首》）"`
 	CategoryID    *int64    `json:"category_id,omitempty" description:"分类ID"`
+	AuthorID      *int64    `json:"author_id,omitempty" description:"作者ID"`
 	CategoryName  string    `json:"category_name,omitempty" description:"分类名称"`
 	Tags          []string  `json:"tags,omitempty" description:"标签列表"`
 	CoverURL      string    `json:"cover_url,omitempty" description:"封面图片URL"`
@@ -84,6 +85,7 @@ type AdminPoemCreateRequest struct {
 	Appreciation  string   `json:"appreciation,omitempty" description:"赏析"`
 	Source        string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
 	CategoryID    *int64   `json:"category_id,omitempty" description:"分类ID"`
+	AuthorID      *int64   `json:"author_id,omitempty" description:"作者ID"`
 	Tags          []string `json:"tags,omitempty" description:"标签列表"`
 	CoverURL      string   `json:"cover_url,omitempty" description:"封面图片URL"`
 	Status        string   `json:"status,omitempty" description:"状态: draft/published/archived"`
@@ -106,6 +108,7 @@ type AdminPoemUpdateRequest struct {
 	Appreciation  string   `json:"appreciation,omitempty" description:"赏析"`
 	Source        string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
 	CategoryID    *int64   `json:"category_id,omitempty" description:"分类ID"`
+	AuthorID      *int64   `json:"author_id,omitempty" description:"作者ID"`
 	Tags          []string `json:"tags,omitempty" description:"标签列表"`
 	CoverURL      string   `json:"cover_url,omitempty" description:"封面图片URL"`
 	Status        string   `json:"status,omitempty" description:"状态: draft/published/archived"`
@@ -275,4 +278,62 @@ type AdminConfigResponse struct {
 type AdminConfigUpdateRequest struct {
 	Value  string `json:"value" validate:"required" description:"配置值"`
 	Remark string `json:"remark,omitempty" description:"备注"`
+}
+
+// ========== 作者管理 ==========
+
+// AdminAuthorResponse 作者响应
+type AdminAuthorResponse struct {
+	ID              int64     `json:"id" description:"作者ID"`
+	Name            string    `json:"name" description:"作者名（简体）"`
+	NameTraditional string    `json:"name_traditional" description:"作者名（繁体）"`
+	Dynasty         string    `json:"dynasty" description:"朝代"`
+	Biography       string    `json:"biography" description:"作者简介"`
+	PoemCount       int64     `json:"poem_count" description:"关联诗歌数量"`
+	CreatedAt       time.Time `json:"created_at" description:"创建时间"`
+	UpdatedAt       time.Time `json:"updated_at" description:"更新时间"`
+}
+
+// AdminAuthorCreateRequest 创建作者请求
+type AdminAuthorCreateRequest struct {
+	Name            string `json:"name" validate:"required,max=100" description:"作者名（简体）"`
+	NameTraditional string `json:"name_traditional,omitempty" description:"作者名（繁体）"`
+	Dynasty         string `json:"dynasty,omitempty" description:"朝代"`
+	Biography       string `json:"biography,omitempty" description:"作者简介"`
+}
+
+// AdminAuthorUpdateRequest 更新作者请求
+type AdminAuthorUpdateRequest struct {
+	Name            string `json:"name" validate:"required,max=100" description:"作者名（简体）"`
+	NameTraditional string `json:"name_traditional,omitempty" description:"作者名（繁体）"`
+	Dynasty         string `json:"dynasty,omitempty" description:"朝代"`
+	Biography       string `json:"biography,omitempty" description:"作者简介"`
+}
+
+// AdminAuthorOptionResponse 作者下拉选项（简化结构，用于搜索框）
+type AdminAuthorOptionResponse struct {
+	ID      int64  `json:"id" description:"作者ID"`
+	Name    string `json:"name" description:"作者名"`
+	Dynasty string `json:"dynasty" description:"朝代"`
+}
+
+// AdminAuthorBatchMatchRequest 批量匹配诗歌请求
+type AdminAuthorBatchMatchRequest struct {
+	PoetryIDs []int64 `json:"poetry_ids" validate:"required,min=1" description:"诗歌ID数组"`
+}
+
+// AdminAuthorBatchMatchResponse 批量匹配结果
+type AdminAuthorBatchMatchResponse struct {
+	Total     int64 `json:"total" description:"总条数"`
+	Matched   int64 `json:"matched" description:"成功匹配数"`
+	Unmatched int64 `json:"unmatched" description:"未匹配数"`
+}
+
+// ========== 工具模块 ==========
+
+// AdminToolGenerateAuthorsResponse 从诗歌提取作者工具响应
+type AdminToolGenerateAuthorsResponse struct {
+	TotalUnique int `json:"total_unique" description:"诗歌中唯一作者数"`
+	Created     int `json:"created" description:"新建作者数"`
+	Skipped     int `json:"skipped" description:"已存在跳过数"`
 }

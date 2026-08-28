@@ -20,11 +20,11 @@ func NewPoemHandler(poemService *admin.AdminPoemService) *PoemHandler {
 	return &PoemHandler{poemService: poemService}
 }
 
-// ImportError 单条导入错误
+// ImportError 单条导入错误（失败或跳过）
 type ImportError struct {
-	Index int    `json:"index" description:"失败记录索引"`
+	Index int    `json:"index" description:"记录索引"`
 	Title string `json:"title" description:"诗歌标题"`
-	Error string `json:"error" description:"错误原因"`
+	Error string `json:"error" description:"原因（失败/重复跳过）"`
 }
 
 // BatchUpdateStatus 批量更新诗歌状态
@@ -105,6 +105,9 @@ func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[any]) (*response.APIRe
 	result := ImportResponse{Total: len(poems)}
 	userID := middleware.GetUserIDFromContext(c.Context())
 
+	// 用于批次内去重：标题+作者
+	seen := make(map[string]bool)
+
 	for i, req := range poems {
 		// 校验必填字段
 		if req.Title == "" || req.Author == "" || req.Content == "" || req.Status == "" {
@@ -116,10 +119,49 @@ func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[any]) (*response.APIRe
 			})
 			continue
 		}
+
+		// 提取正文首句（第一个换行符前的内容，去除首尾空白）
+		firstLine := firstContentLine(req.Content)
+
+		// 批次内去重：标题+作者+正文首句相同视为重复
+		dedupKey := req.Title + "|" + req.Author + "|" + firstLine
+		if seen[dedupKey] {
+			result.Skipped++
+			result.Errors = append(result.Errors, ImportError{
+				Index: i,
+				Title: req.Title,
+				Error: "批次内重复（标题+作者+首句相同），已跳过",
+			})
+			continue
+		}
+		seen[dedupKey] = true
+
 		// 未指定 source 时使用默认值
 		if req.Source == "" && defaultSource != "" {
 			req.Source = defaultSource
 		}
+
+		// 数据库去重：标题+作者+正文首句已存在则跳过
+		exists, err := h.poemService.ExistsByTitleAuthorFirstLine(c.Context(), req.Title, req.Author, firstLine)
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, ImportError{
+				Index: i,
+				Title: req.Title,
+				Error: "查重失败：" + err.Error(),
+			})
+			continue
+		}
+		if exists {
+			result.Skipped++
+			result.Errors = append(result.Errors, ImportError{
+				Index: i,
+				Title: req.Title,
+				Error: "数据库中已存在（标题+作者+首句相同），已跳过",
+			})
+			continue
+		}
+
 		if _, err := h.poemService.Create(c.Context(), &req, &userID); err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, ImportError{
@@ -141,13 +183,19 @@ func (h *PoemHandler) List(c fuego.ContextNoBody) (*response.APIResponse[respons
 	pageSize, _ := strconv.Atoi(c.QueryParam("page_size"))
 	status := c.QueryParam("status")
 	keyword := c.QueryParam("keyword")
+	dynasty := c.QueryParam("dynasty")
 
 	var categoryID *int64
 	if cid, err := strconv.ParseInt(c.QueryParam("category_id"), 10, 64); err == nil {
 		categoryID = &cid
 	}
 
-	result, err := h.poemService.List(c.Context(), page, pageSize, categoryID, status, keyword)
+	var authorID *int64
+	if aid, err := strconv.ParseInt(c.QueryParam("author_id"), 10, 64); err == nil {
+		authorID = &aid
+	}
+
+	result, err := h.poemService.List(c.Context(), page, pageSize, categoryID, status, keyword, dynasty, authorID)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "list failed", Detail: err.Error()}
 	}
@@ -238,25 +286,21 @@ func (h *PoemHandler) UpdateStatus(c fuego.ContextWithBody[adminmodel.AdminPoemU
 	return response.OK[any](nil), nil
 }
 
-// BatchConvertSimplifiedResponse 批量生成简体响应
-type BatchConvertSimplifiedResponse struct {
-	Processed int `json:"processed" description:"成功处理记录数"`
-}
-
-// BatchConvertSimplified 一键为存量诗歌生成简体（繁体 → 简体）
-// 扫描 title_sc 为空的记录，自动生成 title_sc、author_sc、content_sc
-func (h *PoemHandler) BatchConvertSimplified(c fuego.ContextNoBody) (*response.APIResponse[BatchConvertSimplifiedResponse], error) {
-	processed, err := h.poemService.EnsureSimplifiedForAllPoems(c.Context())
-	if err != nil {
-		return nil, fuego.InternalServerError{Title: "批量生成简体失败", Detail: err.Error()}
+// firstContentLine 提取正文首句（第一个换行符前的非空内容）
+func firstContentLine(content string) string {
+	for i, c := range content {
+		if c == '\n' || c == '\r' {
+			return content[:i]
+		}
 	}
-	return response.OK(BatchConvertSimplifiedResponse{Processed: processed}), nil
+	return content
 }
 
 // ImportResponse 批量导入响应
 type ImportResponse struct {
 	Total   int           `json:"total" description:"总条数"`
 	Success int           `json:"success" description:"成功数"`
+	Skipped int           `json:"skipped" description:"跳过数（重复）"`
 	Failed  int           `json:"failed" description:"失败数"`
-	Errors  []ImportError `json:"errors" description:"失败详情"`
+	Errors  []ImportError `json:"errors" description:"跳过/失败详情"`
 }

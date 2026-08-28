@@ -6,6 +6,7 @@ import (
 
 	"poem-backend/internal/config"
 	"poem-backend/internal/handler/admin"
+	"poem-backend/internal/handler/admin/tools"
 	"poem-backend/internal/middleware"
 	"poem-backend/internal/repository"
 	adminservice "poem-backend/internal/service/admin"
@@ -26,6 +27,7 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	favoriteRepo := repository.NewFavoriteRepository(db)
 	readingPlanRepo := repository.NewReadingPlanRepository(db)
 	passkeyRepo := repository.NewPasskeyRepository(db)
+	authorRepo := repository.NewAuthorRepository(db)
 
 	// 初始化 Service
 	adminAuthService := adminservice.NewAdminAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpireHour)
@@ -37,6 +39,7 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	adminAnnouncementService := adminservice.NewAdminAnnouncementService(announcementRepo)
 	adminConfigService := adminservice.NewAdminConfigService(configRepo)
 	adminUserService := adminservice.NewAdminUserService(userRepo, checkinRepo, favoriteRepo, readingPlanRepo, passkeyRepo)
+	adminAuthorService := adminservice.NewAdminAuthorService(authorRepo)
 
 	// 初始化 Handler
 	authHandler := admin.NewAuthHandler(adminAuthService)
@@ -48,6 +51,8 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	announcementHandler := admin.NewAnnouncementHandler(adminAnnouncementService)
 	configHandler := admin.NewConfigHandler(adminConfigService)
 	userHandler := admin.NewUserHandler(adminUserService)
+	authorHandler := admin.NewAuthorHandler(adminAuthorService)
+	toolsHandler := tools.NewToolsHandler(adminPoemService, adminAuthorService)
 
 	// ========== 后台管理路由组（端口 8081，全部以 /api/admin 开头）==========
 	adminGroup := fuego.Group(server, "/api/admin")
@@ -128,10 +133,41 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionOverrideDescription("批量更新多首诗歌的状态"),
 		fuego.OptionTags("诗歌管理"),
 	)
-	fuego.Post(adminMgmt, "/poems/batch/convert-simplified", poemHandler.BatchConvertSimplified,
-		fuego.OptionSummary("批量生成简体"),
-		fuego.OptionOverrideDescription("一键为存量诗歌自动生成简体（繁体→简体），扫描 title_sc 为空的记录进行处理"),
-		fuego.OptionTags("诗歌管理"),
+	// [作者管理]
+	fuego.Get(adminMgmt, "/authors", authorHandler.List,
+		fuego.OptionSummary("获取作者列表"),
+		fuego.OptionOverrideDescription("分页获取作者列表，支持关键词搜索"),
+		fuego.OptionTags("作者管理"),
+	)
+	fuego.Get(adminMgmt, "/authors/options", authorHandler.Options,
+		fuego.OptionSummary("作者下拉搜索"),
+		fuego.OptionOverrideDescription("搜索作者用于诗歌表单下拉选择"),
+		fuego.OptionTags("作者管理"),
+	)
+	fuego.Get(adminMgmt, "/authors/{id}", authorHandler.GetByID,
+		fuego.OptionSummary("获取作者详情"),
+		fuego.OptionOverrideDescription("根据 ID 获取作者详情"),
+		fuego.OptionTags("作者管理"),
+	)
+	fuego.Post(adminMgmt, "/authors", authorHandler.Create,
+		fuego.OptionSummary("创建作者"),
+		fuego.OptionOverrideDescription("创建新作者"),
+		fuego.OptionTags("作者管理"),
+	)
+	fuego.Put(adminMgmt, "/authors/{id}", authorHandler.Update,
+		fuego.OptionSummary("更新作者"),
+		fuego.OptionOverrideDescription("更新作者信息"),
+		fuego.OptionTags("作者管理"),
+	)
+	fuego.Delete(adminMgmt, "/authors/{id}", authorHandler.Delete,
+		fuego.OptionSummary("删除作者"),
+		fuego.OptionOverrideDescription("删除作者（关联诗歌的外键将置空）"),
+		fuego.OptionTags("作者管理"),
+	)
+	fuego.Post(adminMgmt, "/authors/batch/match", authorHandler.BatchMatch,
+		fuego.OptionSummary("批量匹配诗歌"),
+		fuego.OptionOverrideDescription("批量匹配诗歌与作者的关联关系"),
+		fuego.OptionTags("作者管理"),
 	)
 
 	// [分类管理]
@@ -271,5 +307,17 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionSummary("更新用户状态"),
 		fuego.OptionOverrideDescription("禁用或启用用户账号"),
 		fuego.OptionTags("用户管理"),
+	)
+
+	// [工具模块] 批量数据处理工具
+	fuego.Post(adminMgmt, "/tools/convert-simplified", toolsHandler.BatchConvertSimplified,
+		fuego.OptionSummary("批量生成简体"),
+		fuego.OptionOverrideDescription("一键为存量诗歌自动生成简体（繁体→简体），扫描 title_sc/author_sc/content_sc 为空的记录进行处理"),
+		fuego.OptionTags("工具模块"),
+	)
+	fuego.Post(adminMgmt, "/tools/generate-authors", toolsHandler.GenerateAuthorsFromPoems,
+		fuego.OptionSummary("提取作者"),
+		fuego.OptionOverrideDescription("从已有诗歌作品中提取所有不重复的作者名，自动创建作者记录（跳过已存在的）"),
+		fuego.OptionTags("工具模块"),
 	)
 }
