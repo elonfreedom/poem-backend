@@ -21,19 +21,20 @@ type PageData[T any] struct {
 	Total int64 `json:"total" description:"总条数"`
 }
 
+// SimpleResponse 简单响应（用于删除、更新等无数据返回的操作）
+type SimpleResponse struct {
+	Success bool `json:"success" description:"操作是否成功"`
+}
+
 // OK 成功响应（code: 0）
 func OK[T any](data T) *APIResponse[T] {
 	return &APIResponse[T]{Code: 0, Message: "ok", Data: data}
 }
 
-// Success 标准成功响应（code: 200, message: "success"）
-// 用于用户端接口统一返回格式
-func Success(data any) map[string]any {
-	return map[string]any{
-		"code":    200,
-		"message": "success",
-		"data":    data,
-	}
+// Success 成功响应（code: 0, message: "ok"）
+// 用于用户端接口统一返回格式，与 Admin 端保持一致
+func Success(data any) *APIResponse[any] {
+	return &APIResponse[any]{Code: 0, Message: "ok", Data: data}
 }
 
 // PageOK 分页成功响应

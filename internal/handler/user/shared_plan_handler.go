@@ -1,12 +1,10 @@
 package user
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/go-fuego/fuego"
 
-	"poem-backend/internal/middleware"
 	usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 	"poem-backend/pkg/response"
@@ -23,10 +21,10 @@ func NewSharedPlanHandler(sharedPlanService *userservice.SharedPlanService) *Sha
 // ==================== 共享计划管理 ====================
 
 // CreateSharedPlan 创建并发布共享计划
-func (h *SharedPlanHandler) CreateSharedPlan(c fuego.ContextWithBody[usermodel.CreateSharedPlanRequest]) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) CreateSharedPlan(c fuego.ContextWithBody[usermodel.CreateSharedPlanRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
 	body, err := c.Body()
@@ -36,25 +34,24 @@ func (h *SharedPlanHandler) CreateSharedPlan(c fuego.ContextWithBody[usermodel.C
 
 	result, err := h.sharedPlanService.CreateSharedPlan(c.Context(), userID, &body)
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // GetSharedPlan 获取共享计划详情（含诗文列表）
-func (h *SharedPlanHandler) GetSharedPlan(c fuego.ContextNoBody) (map[string]any, error) {
-	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+func (h *SharedPlanHandler) GetSharedPlan(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	id, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划ID"}
+		return nil, err
 	}
 
 	result, err := h.sharedPlanService.GetSharedPlan(c.Context(), id)
 	if err != nil {
-		return nil, fuego.NotFoundError{Title: "not found", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	// 构建响应：plan 基本信息 + poems 数组
 	return response.Success(map[string]any{
 		"id":              result.ID,
 		"title":           result.Title,
@@ -71,15 +68,15 @@ func (h *SharedPlanHandler) GetSharedPlan(c fuego.ContextNoBody) (map[string]any
 }
 
 // UpdateSharedPlan 更新共享计划
-func (h *SharedPlanHandler) UpdateSharedPlan(c fuego.ContextWithBody[usermodel.UpdateSharedPlanRequest]) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) UpdateSharedPlan(c fuego.ContextWithBody[usermodel.UpdateSharedPlanRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	id, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划ID"}
+		return nil, err
 	}
 
 	body, err := c.Body()
@@ -88,80 +85,72 @@ func (h *SharedPlanHandler) UpdateSharedPlan(c fuego.ContextWithBody[usermodel.U
 	}
 
 	if err := h.sharedPlanService.UpdateSharedPlan(c.Context(), id, userID, &body); err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "updated"}), nil
+	return response.Success(StatusUpdated), nil
 }
 
 // PublishPlan 发布计划
-func (h *SharedPlanHandler) PublishPlan(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) PublishPlan(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	id, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划ID"}
+		return nil, err
 	}
 
 	if err := h.sharedPlanService.PublishPlan(c.Context(), id, userID); err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "published"}), nil
+	return response.Success(StatusPublished), nil
 }
 
 // UnpublishPlan 取消发布
-func (h *SharedPlanHandler) UnpublishPlan(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) UnpublishPlan(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	id, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划ID"}
+		return nil, err
 	}
 
 	if err := h.sharedPlanService.UnpublishPlan(c.Context(), id, userID); err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "unpublished"}), nil
+	return response.Success(StatusUnpublished), nil
 }
 
 // DeleteSharedPlan 删除共享计划
-func (h *SharedPlanHandler) DeleteSharedPlan(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) DeleteSharedPlan(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	id, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划ID"}
+		return nil, err
 	}
 
 	if err := h.sharedPlanService.DeleteSharedPlan(c.Context(), id, userID); err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "deleted"}), nil
+	return response.Success(StatusDeleted), nil
 }
 
 // ListSharedPlans 浏览共享库
-func (h *SharedPlanHandler) ListSharedPlans(c fuego.ContextNoBody) (map[string]any, error) {
-	page, _ := strconv.Atoi(c.QueryParam("page"))
-	if page < 1 {
-		page = 1
-	}
-	pageSize, _ := strconv.Atoi(c.QueryParam("page_size"))
-	if pageSize < 1 || pageSize > 50 {
-		pageSize = 20
-	}
-
+func (h *SharedPlanHandler) ListSharedPlans(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	page, pageSize := ParsePageParams(c)
 	keyword := c.QueryParam("q")
 	sortBy := c.QueryParam("sort")
 
@@ -173,25 +162,25 @@ func (h *SharedPlanHandler) ListSharedPlans(c fuego.ContextNoBody) (map[string]a
 
 	list, total, err := h.sharedPlanService.ListSharedPlans(c.Context(), page, pageSize, keyword, tags, sortBy)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]any{
-		"total": total,
-		"items": list,
+	return response.Success(PageResponse[usermodel.SharedPlanListItem]{
+		Items: list,
+		Total: int64(total),
 	}), nil
 }
 
 // GetMySharedPlans 获取我创建的计划
-func (h *SharedPlanHandler) GetMySharedPlans(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) GetMySharedPlans(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
 	list, err := h.sharedPlanService.GetMySharedPlans(c.Context(), userID)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(list), nil
@@ -200,15 +189,15 @@ func (h *SharedPlanHandler) GetMySharedPlans(c fuego.ContextNoBody) (map[string]
 // ==================== 订阅管理 ====================
 
 // Subscribe 订阅计划
-func (h *SharedPlanHandler) Subscribe(c fuego.ContextWithBody[usermodel.SubscribeRequest]) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) Subscribe(c fuego.ContextWithBody[usermodel.SubscribeRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	id, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划ID"}
+		return nil, err
 	}
 
 	body, err := c.Body()
@@ -218,41 +207,41 @@ func (h *SharedPlanHandler) Subscribe(c fuego.ContextWithBody[usermodel.Subscrib
 
 	result, err := h.sharedPlanService.Subscribe(c.Context(), userID, id, body.StartDate)
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // Unsubscribe 取消订阅
-func (h *SharedPlanHandler) Unsubscribe(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) Unsubscribe(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	id, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划ID"}
+		return nil, err
 	}
 
 	if err := h.sharedPlanService.Unsubscribe(c.Context(), userID, id); err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "unsubscribed"}), nil
+	return response.Success(StatusUnsubscribed), nil
 }
 
 // SetStartDate 设置开始日期
-func (h *SharedPlanHandler) SetStartDate(c fuego.ContextWithBody[usermodel.SetStartDateRequest]) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) SetStartDate(c fuego.ContextWithBody[usermodel.SetStartDateRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	id, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的订阅ID"}
+		return nil, err
 	}
 
 	body, err := c.Body()
@@ -261,62 +250,62 @@ func (h *SharedPlanHandler) SetStartDate(c fuego.ContextWithBody[usermodel.SetSt
 	}
 
 	if err := h.sharedPlanService.SetStartDate(c.Context(), id, userID, body.StartDate); err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "updated"}), nil
+	return response.Success(StatusUpdated), nil
 }
 
 // GetMySubscriptions 获取我的订阅列表
-func (h *SharedPlanHandler) GetMySubscriptions(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) GetMySubscriptions(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
 	list, err := h.sharedPlanService.GetMySubscriptions(c.Context(), userID)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]any{
-		"total": len(list),
-		"items": list,
+	return response.Success(PageResponse[usermodel.SubscribeListResponse]{
+		Items: list,
+		Total: int64(len(list)),
 	}), nil
 }
 
 // ==================== 每日诗文 & 打卡 ====================
 
 // GetTodayPoem 获取今日诗文
-func (h *SharedPlanHandler) GetTodayPoem(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) GetTodayPoem(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	subID, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	subID, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的订阅ID"}
+		return nil, err
 	}
 
 	result, err := h.sharedPlanService.GetTodayPoem(c.Context(), subID, userID)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // Checkin 打卡
-func (h *SharedPlanHandler) Checkin(c fuego.ContextWithBody[usermodel.CheckinRequest]) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) Checkin(c fuego.ContextWithBody[usermodel.CheckinRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	subID, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	subID, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的订阅ID"}
+		return nil, err
 	}
 
 	body, err := c.Body()
@@ -326,22 +315,22 @@ func (h *SharedPlanHandler) Checkin(c fuego.ContextWithBody[usermodel.CheckinReq
 
 	result, err := h.sharedPlanService.Checkin(c.Context(), subID, userID, body.PoemIDs)
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // SkipDay 跳过当前天，返回下一首未打卡的诗文
-func (h *SharedPlanHandler) SkipDay(c fuego.ContextWithBody[usermodel.SkipDayRequest]) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) SkipDay(c fuego.ContextWithBody[usermodel.SkipDayRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	subID, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	subID, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的订阅ID"}
+		return nil, err
 	}
 
 	body, err := c.Body()
@@ -351,86 +340,87 @@ func (h *SharedPlanHandler) SkipDay(c fuego.ContextWithBody[usermodel.SkipDayReq
 
 	result, err := h.sharedPlanService.SkipDay(c.Context(), subID, userID, body.CurrentDay)
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // GetCheckins 获取订阅的打卡记录列表（用于热力图）
-func (h *SharedPlanHandler) GetCheckins(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) GetCheckins(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	subID, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	subID, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的订阅ID"}
+		return nil, err
 	}
 
 	result, err := h.sharedPlanService.GetCheckins(c.Context(), subID, userID)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // GetSubscriptionProgress 获取订阅进度
-func (h *SharedPlanHandler) GetSubscriptionProgress(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) GetSubscriptionProgress(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	subID, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	subID, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的订阅ID"}
+		return nil, err
 	}
 
 	result, err := h.sharedPlanService.GetSubscriptionProgress(c.Context(), subID, userID)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // PauseSubscription 暂停订阅
-func (h *SharedPlanHandler) PauseSubscription(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) PauseSubscription(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	subID, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	subID, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的订阅ID"}
+		return nil, err
 	}
 
 	if err := h.sharedPlanService.PauseSubscription(c.Context(), subID, userID); err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "paused"}), nil
+	return response.Success(StatusPaused), nil
 }
 
 // ResumeSubscription 恢复订阅
-func (h *SharedPlanHandler) ResumeSubscription(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *SharedPlanHandler) ResumeSubscription(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	subID, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+	subID, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的订阅ID"}
+		return nil, err
 	}
 
 	if err := h.sharedPlanService.ResumeSubscription(c.Context(), subID, userID); err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "resumed"}), nil
+	return response.Success(StatusResumed), nil
 }
+

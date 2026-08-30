@@ -2,6 +2,11 @@ package admin
 
 import (
 	"context"
+	"errors"
+	"fmt"
+
+	"github.com/go-fuego/fuego"
+	"github.com/jackc/pgx/v5"
 
 	adminmodel "poem-backend/internal/model/adminmodel"
 	"poem-backend/internal/repository"
@@ -35,7 +40,7 @@ func NewAdminUserService(
 func (s *AdminUserService) ListUsers(ctx context.Context, page, pageSize int, keyword, statusFilter string) ([]adminmodel.AdminUserListItem, int64, error) {
 	users, total, err := s.userRepo.ListUsers(ctx, page, pageSize, keyword, statusFilter)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户列表失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminUserListItem, 0, len(users))
@@ -59,7 +64,10 @@ func (s *AdminUserService) ListUsers(ctx context.Context, page, pageSize int, ke
 func (s *AdminUserService) GetUserDetail(ctx context.Context, userID string) (*adminmodel.AdminUserDetailResponse, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "user not found", Detail: fmt.Sprintf("用户不存在: id=%s", userID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户失败: id=%s, error=%v", userID, err)}
 	}
 
 	detail := &adminmodel.AdminUserDetailResponse{
@@ -100,7 +108,10 @@ func (s *AdminUserService) GetUserDetail(ctx context.Context, userID string) (*a
 
 // UpdateUserStatus 更新用户状态
 func (s *AdminUserService) UpdateUserStatus(ctx context.Context, userID string, status string) error {
-	return s.userRepo.UpdateStatus(ctx, userID, status)
+	if err := s.userRepo.UpdateStatus(ctx, userID, status); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新用户状态失败: id=%s, error=%v", userID, err)}
+	}
+	return nil
 }
 
 // maskEmail 脱敏邮箱

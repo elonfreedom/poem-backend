@@ -19,7 +19,7 @@ func NewPoemHandler(poemService *userservice.PoemService) *PoemHandler {
 }
 
 // List 获取诗歌列表
-func (h *PoemHandler) List(c fuego.ContextNoBody) (map[string]any, error) {
+func (h *PoemHandler) List(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	if page < 1 {
 		page = 1
@@ -41,17 +41,17 @@ func (h *PoemHandler) List(c fuego.ContextNoBody) (map[string]any, error) {
 
 	result, err := h.poemService.List(c.Context(), page, perPage, categoryID, dynasty)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // GetByID 获取诗歌详情
-func (h *PoemHandler) GetByID(c fuego.ContextNoBody) (map[string]any, error) {
-	poemID, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
+func (h *PoemHandler) GetByID(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	poemID, err := ParsePathID(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的诗歌 ID"}
+		return nil, err
 	}
 
 	var userID *string
@@ -62,14 +62,14 @@ func (h *PoemHandler) GetByID(c fuego.ContextNoBody) (map[string]any, error) {
 
 	result, err := h.poemService.GetByID(c.Context(), poemID, userID)
 	if err != nil {
-		return nil, fuego.NotFoundError{Title: "not found", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // Search 搜索诗歌
-func (h *PoemHandler) Search(c fuego.ContextNoBody) (map[string]any, error) {
+func (h *PoemHandler) Search(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	keyword := c.QueryParam("q")
 	if keyword == "" {
 		return nil, fuego.BadRequestError{Title: "missing keyword", Detail: "搜索关键词不能为空"}
@@ -86,17 +86,17 @@ func (h *PoemHandler) Search(c fuego.ContextNoBody) (map[string]any, error) {
 
 	result, err := h.poemService.Search(c.Context(), keyword, page, perPage)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // GetDaily 获取每日推荐
-func (h *PoemHandler) GetDaily(c fuego.ContextNoBody) (map[string]any, error) {
+func (h *PoemHandler) GetDaily(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	result, err := h.poemService.GetDailyRecommendation(c.Context())
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil

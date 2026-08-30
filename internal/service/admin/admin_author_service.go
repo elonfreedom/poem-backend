@@ -2,7 +2,11 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/go-fuego/fuego"
+	"github.com/jackc/pgx/v5"
 
 	"poem-backend/internal/model"
 	adminmodel "poem-backend/internal/model/admin"
@@ -30,7 +34,7 @@ func (s *AdminAuthorService) List(ctx context.Context, page, pageSize int, keywo
 
 	authors, total, err := s.authorRepo.List(ctx, page, pageSize, keyword)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list authors: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询作者列表失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminAuthorResponse, 0, len(authors))
@@ -45,7 +49,10 @@ func (s *AdminAuthorService) List(ctx context.Context, page, pageSize int, keywo
 func (s *AdminAuthorService) GetByID(ctx context.Context, id int64) (*adminmodel.AdminAuthorResponse, error) {
 	author, err := s.authorRepo.GetByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get author: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "author not found", Detail: fmt.Sprintf("作者不存在: id=%d", id)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询作者失败: id=%d, error=%v", id, err)}
 	}
 	poemCount, _ := s.authorRepo.GetPoemCount(ctx, author.ID)
 	resp := toAdminAuthorResponse(*author, poemCount)
@@ -71,7 +78,7 @@ func (s *AdminAuthorService) Create(ctx context.Context, req *adminmodel.AdminAu
 	}
 
 	if err := s.authorRepo.Create(ctx, author); err != nil {
-		return nil, fmt.Errorf("failed to create author: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("创建作者失败: %v", err)}
 	}
 
 	resp := toAdminAuthorResponse(*author, 0)
@@ -82,7 +89,10 @@ func (s *AdminAuthorService) Create(ctx context.Context, req *adminmodel.AdminAu
 func (s *AdminAuthorService) Update(ctx context.Context, id int64, req *adminmodel.AdminAuthorUpdateRequest) error {
 	author, err := s.authorRepo.GetByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("failed to get author: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fuego.NotFoundError{Title: "author not found", Detail: fmt.Sprintf("作者不存在: id=%d", id)}
+		}
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询作者失败: id=%d, error=%v", id, err)}
 	}
 
 	author.Name = req.Name
@@ -93,19 +103,25 @@ func (s *AdminAuthorService) Update(ctx context.Context, id int64, req *adminmod
 		author.Dynasty = "未知"
 	}
 
-	return s.authorRepo.Update(ctx, author)
+	if err := s.authorRepo.Update(ctx, author); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新作者失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 // Delete 删除作者
 func (s *AdminAuthorService) Delete(ctx context.Context, id int64) error {
-	return s.authorRepo.Delete(ctx, id)
+	if err := s.authorRepo.Delete(ctx, id); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("删除作者失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 // SearchOptions 搜索作者（用于下拉框）
 func (s *AdminAuthorService) SearchOptions(ctx context.Context, keyword string) ([]adminmodel.AdminAuthorOptionResponse, error) {
 	authors, err := s.authorRepo.SearchByKeyword(ctx, keyword, 20)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search authors: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("搜索作者失败: %v", err)}
 	}
 
 	options := make([]adminmodel.AdminAuthorOptionResponse, 0, len(authors))
@@ -123,7 +139,7 @@ func (s *AdminAuthorService) SearchOptions(ctx context.Context, keyword string) 
 func (s *AdminAuthorService) BatchMatchPoems(ctx context.Context, poetryIDs []int64) (*adminmodel.AdminAuthorBatchMatchResponse, error) {
 	matched, unmatched, err := s.authorRepo.BatchMatchPoems(ctx, poetryIDs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to batch match poems: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("批量匹配诗歌失败: %v", err)}
 	}
 	return &adminmodel.AdminAuthorBatchMatchResponse{
 		Total:     int64(len(poetryIDs)),
@@ -137,7 +153,7 @@ func (s *AdminAuthorService) BatchMatchPoems(ctx context.Context, poetryIDs []in
 func (s *AdminAuthorService) GenerateAuthorsFromPoems(ctx context.Context) (*adminmodel.AdminToolGenerateAuthorsResponse, error) {
 	result, err := s.authorRepo.GenerateAuthorsFromPoems(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate authors from poems: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("从诗歌提取作者失败: %v", err)}
 	}
 	return result, nil
 }

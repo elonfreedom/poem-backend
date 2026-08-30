@@ -94,9 +94,11 @@ func Run(db *pgxpool.Pool) error {
 
 	// 迁移完成后，为存量诗歌生成拼音数据
 	poemRepo := repository.NewPoemRepository(db)
-	if err := poemRepo.EnsurePinyinForAllPoems(context.Background()); err != nil {
+	if count, err := poemRepo.EnsurePinyinForAllPoems(context.Background()); err != nil {
 		log.Printf("Pinyin generation warning: %v", err)
 		// 拼音生成失败不影响服务启动，admin 可以后续手动补充
+	} else if count > 0 {
+		log.Printf("Pinyin generation completed: %d poems processed", count)
 	}
 
 	return nil

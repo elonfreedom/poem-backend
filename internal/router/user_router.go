@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"poem-backend/internal/config"
+	"poem-backend/internal/handler/public"
 	"poem-backend/internal/handler/user"
 	"poem-backend/internal/middleware"
 	"poem-backend/internal/repository"
@@ -24,6 +25,7 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 	*user.ReadingPlanHandler,
 	*user.SharedPlanHandler,
 	*user.CheckinHandler,
+	*public.TTSHandler,
 ) {
 	// 初始化 WebAuthn
 	wn, err := webauthn.New(&webauthn.Config{
@@ -52,8 +54,8 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 	poemService := userservice.NewPoemService(poemRepo)
 	favoriteService := userservice.NewFavoriteService(favoriteRepo, poemRepo)
 	readingPlanService := userservice.NewReadingPlanService(readingPlanRepo)
-	sharedPlanService := userservice.NewSharedPlanService(sharedPlanRepo, poemRepo)
-	checkinService := userservice.NewCheckinService(checkinRepo)
+	sharedPlanService := userservice.NewSharedPlanService(sharedPlanRepo, checkinRepo, poemRepo)
+	checkinService := userservice.NewCheckinService(checkinRepo, readingPlanRepo)
 
 	// 初始化 Handler
 	authHandler := user.NewAuthHandler(authService, sessionRepo, connectionRepo)
@@ -63,18 +65,19 @@ func initUserDependencies(server *fuego.Server, db *pgxpool.Pool, cfg *config.Co
 	readingPlanHandler := user.NewReadingPlanHandler(readingPlanService)
 	sharedPlanHandler := user.NewSharedPlanHandler(sharedPlanService)
 	checkinHandler := user.NewCheckinHandler(checkinService)
+	ttsHandler := public.NewTTSHandler()
 
-	return authHandler, userHandler, poemHandler, favoriteHandler, readingPlanHandler, sharedPlanHandler, checkinHandler
+	return authHandler, userHandler, poemHandler, favoriteHandler, readingPlanHandler, sharedPlanHandler, checkinHandler, ttsHandler
 }
 
 // SetupUserRoutes 注册用户端（C端）路由 - 端口 8080
 func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config) {
-	authHandler, userHandler, poemHandler, favoriteHandler, readingPlanHandler, sharedPlanHandler, checkinHandler :=
+	authHandler, userHandler, poemHandler, favoriteHandler, readingPlanHandler, sharedPlanHandler, checkinHandler, ttsHandler :=
 		initUserDependencies(server, db, cfg)
 
-	// 启动定期清理过期 session（每 5 分钟）
+	// 启动定期清理（session 5分钟，连接心跳 20秒以匹配 60秒超时）
 	authHandler.SessionStore.StartCleanup(context.Background(), 5*time.Minute)
-	authHandler.ConnectionStore.StartCleanup(context.Background(), 5*time.Minute)
+	authHandler.ConnectionStore.StartCleanup(context.Background(), 20*time.Second)
 
 	// ========== 公开路由：Passkey 认证 ==========
 	public := fuego.Group(server, "/api/public")
@@ -136,10 +139,23 @@ func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config)
 		fuego.OptionTags("Passkey 认证"),
 	)
 	fuego.Post(public, "/passkeys/add/reject", authHandler.AddDeviceReject,
-		fuego.OptionSummary("设备 B 放弃绑定"),
-		fuego.OptionOverrideDescription("设备 B 主动放弃创建 Passkey，通知设备 A 关闭等待弹窗（公开接口）"),
+		fuego.OptionSummary("放弃绑定"),
+		fuego.OptionOverrideDescription("设备 A 放弃当前绑定请求"),
 		fuego.OptionTags("Passkey 认证"),
 	)
+
+	// [TTS 朗读]
+	fuego.Get(public, "/tts", ttsHandler.Synthesize,
+		fuego.OptionSummary("语音合成"),
+		fuego.OptionOverrideDescription("将诗文合成为语音（MP3），支持语速调节，20次/分钟限流，24h 缓存"),
+		fuego.OptionTags("TTS 朗读"),
+	)
+	fuego.Get(public, "/tts/timestamps", ttsHandler.Timestamps,
+		fuego.OptionSummary("获取朗读时间戳"),
+		fuego.OptionOverrideDescription("返回每句话的起止时间，用于前端高亮同步。参数：text（诗文），speed（语速，可选）"),
+		fuego.OptionTags("TTS 朗读"),
+	)
+
 
 	// ========== 用户路由（需认证）==========
 	userGroup := fuego.Group(server, "/api/user")

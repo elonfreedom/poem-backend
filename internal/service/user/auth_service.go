@@ -2,13 +2,16 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/go-fuego/fuego"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"poem-backend/internal/middleware"
 	usermodel "poem-backend/internal/model/user"
@@ -55,13 +58,13 @@ func (s *AuthService) BeginRegistration(ctx context.Context, deviceName string) 
 
 	// 创建用户
 	if err := s.userRepo.Create(ctx, user); err != nil {
-		return nil, nil, "", "", fmt.Errorf("failed to create user: %w", err)
+		return nil, nil, "", "", fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("创建用户失败: %v", err)}
 	}
 
 	// 开始 WebAuthn 注册
 	options, session, err := s.webauthn.BeginRegistration(user)
 	if err != nil {
-		return nil, nil, "", "", fmt.Errorf("failed to begin registration: %w", err)
+		return nil, nil, "", "", fuego.InternalServerError{Title: "webauthn error", Detail: fmt.Sprintf("初始化注册失败: %v", err)}
 	}
 
 	// 生成会话 ID
@@ -75,13 +78,16 @@ func (s *AuthService) FinishRegistration(ctx context.Context, userID string, ses
 	// 获取用户
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "user not found", Detail: fmt.Sprintf("用户不存在: id=%s", userID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户失败: %v", err)}
 	}
 
 	// 完成 WebAuthn 注册
 	credential, err := s.webauthn.FinishRegistration(user, session, r)
 	if err != nil {
-		return nil, fmt.Errorf("failed to finish registration: %w", err)
+		return nil, fuego.BadRequestError{Title: "webauthn failed", Detail: fmt.Sprintf("注册验证失败: %v", err)}
 	}
 
 	// 保存 Passkey
@@ -95,13 +101,13 @@ func (s *AuthService) FinishRegistration(ctx context.Context, userID string, ses
 		CreatedAt:    time.Now(),
 	}
 	if err := s.passkeyRepo.Create(ctx, passkey); err != nil {
-		return nil, fmt.Errorf("failed to save passkey: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("保存 Passkey 失败: %v", err)}
 	}
 
 	// 生成 JWT
 	token, err := middleware.GenerateToken(user.ID, user.Role, s.jwtSecret, s.jwtExpire)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+		return nil, fuego.InternalServerError{Title: "token error", Detail: fmt.Sprintf("生成令牌失败: %v", err)}
 	}
 
 	return &usermodel.LoginResponse{
@@ -115,7 +121,7 @@ func (s *AuthService) BeginLogin(ctx context.Context) (*protocol.CredentialAsser
 	// 发现式登录（无需用户名）
 	options, session, err := s.webauthn.BeginDiscoverableLogin()
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("failed to begin login: %w", err)
+		return nil, nil, "", fuego.InternalServerError{Title: "webauthn error", Detail: fmt.Sprintf("初始化登录失败: %v", err)}
 	}
 
 	// 生成会话 ID
@@ -129,19 +135,19 @@ func (s *AuthService) FinishLogin(ctx context.Context, session webauthn.SessionD
 	// 完成 WebAuthn 登录（发现式）
 	credential, err := s.webauthn.FinishDiscoverableLogin(s.findUserHandler(ctx), session, r)
 	if err != nil {
-		return nil, fmt.Errorf("failed to finish login: %w", err)
+		return nil, fuego.UnauthorizedError{Title: "login failed", Detail: fmt.Sprintf("登录验证失败: %v", err)}
 	}
 
 	// 根据 credential ID 查找 Passkey
 	passkey, err := s.passkeyRepo.GetByCredentialID(ctx, credential.ID)
 	if err != nil {
-		return nil, fmt.Errorf("credential not found: %w", err)
+		return nil, fuego.UnauthorizedError{Title: "login failed", Detail: "凭证不存在"}
 	}
 
 	// 获取用户
 	user, err := s.userRepo.GetByID(ctx, passkey.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户失败: %v", err)}
 	}
 
 	// 更新签名计数器
@@ -152,7 +158,7 @@ func (s *AuthService) FinishLogin(ctx context.Context, session webauthn.SessionD
 	// 生成 JWT
 	token, err := middleware.GenerateToken(user.ID, user.Role, s.jwtSecret, s.jwtExpire)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate token: %w", err)
+		return nil, fuego.InternalServerError{Title: "token error", Detail: fmt.Sprintf("生成令牌失败: %v", err)}
 	}
 
 	return &usermodel.LoginResponse{
@@ -204,20 +210,23 @@ func (s *AuthService) BeginAddDevice(ctx context.Context, userID string, deviceN
 	// 获取用户
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return "", nil, nil, time.Time{}, fmt.Errorf("查询用户失败: id=%s, error=%w", userID, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil, nil, time.Time{}, fuego.NotFoundError{Title: "user not found", Detail: fmt.Sprintf("用户不存在: id=%s", userID)}
+		}
+		return "", nil, nil, time.Time{}, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户失败: %v", err)}
 	}
 
 	// 查询用户已有的 Passkey 凭证，用于 excludeCredentials
 	// 避免 iCloud Keychain 等同步场景下浏览器返回 NotAllowedError
 	excludeList, err := s.buildExcludeList(ctx, userID)
 	if err != nil {
-		return "", nil, nil, time.Time{}, fmt.Errorf("查询已有凭证失败: user_id=%s, error=%w", userID, err)
+		return "", nil, nil, time.Time{}, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询已有凭证失败: %v", err)}
 	}
 
 	// 开始 WebAuthn 注册（为现有用户添加新 credential，排除已有凭证）
 	options, session, err := s.webauthn.BeginRegistration(user, webauthn.WithExclusions(excludeList))
 	if err != nil {
-		return "", nil, nil, time.Time{}, fmt.Errorf("初始化 WebAuthn 注册失败: user_id=%s, error=%w", userID, err)
+		return "", nil, nil, time.Time{}, fuego.InternalServerError{Title: "webauthn error", Detail: fmt.Sprintf("初始化注册失败: %v", err)}
 	}
 
 	// 生成连接令牌（10分钟有效）
@@ -232,7 +241,7 @@ func (s *AuthService) BeginAddDevice(ctx context.Context, userID string, deviceN
 func (s *AuthService) buildExcludeList(ctx context.Context, userID string) ([]protocol.CredentialDescriptor, error) {
 	passkeys, err := s.passkeyRepo.GetByUserID(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询 Passkey 失败: %v", err)}
 	}
 
 	excludeList := make([]protocol.CredentialDescriptor, 0, len(passkeys))
@@ -251,13 +260,16 @@ func (s *AuthService) FinishAddDevice(ctx context.Context, userID string, sessio
 	// 获取用户
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("查询用户失败: id=%s, error=%w", userID, err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "user not found", Detail: fmt.Sprintf("用户不存在: id=%s", userID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户失败: %v", err)}
 	}
 
 	// 完成 WebAuthn 注册（验证 credential 并提取公钥）
 	credential, err := s.webauthn.FinishRegistration(user, session, r)
 	if err != nil {
-		return nil, fmt.Errorf("WebAuthn 凭证验证失败: user_id=%s, error=%w", userID, err)
+		return nil, fuego.BadRequestError{Title: "webauthn failed", Detail: fmt.Sprintf("凭证验证失败: %v", err)}
 	}
 
 	// 保存 Passkey
@@ -271,13 +283,13 @@ func (s *AuthService) FinishAddDevice(ctx context.Context, userID string, sessio
 		CreatedAt:    time.Now(),
 	}
 	if err := s.passkeyRepo.Create(ctx, passkey); err != nil {
-		return nil, fmt.Errorf("保存 Passkey 失败: user_id=%s, credential_id=%s, error=%w", userID, credential.ID, err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("保存 Passkey 失败: %v", err)}
 	}
 
 	// 生成 JWT
 	token, err := middleware.GenerateToken(user.ID, user.Role, s.jwtSecret, s.jwtExpire)
 	if err != nil {
-		return nil, fmt.Errorf("生成 Token 失败: user_id=%s, error=%w", userID, err)
+		return nil, fuego.InternalServerError{Title: "token error", Detail: fmt.Sprintf("生成令牌失败: %v", err)}
 	}
 
 	return &usermodel.LoginResponse{

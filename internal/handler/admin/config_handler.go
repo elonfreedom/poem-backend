@@ -20,7 +20,7 @@ func NewConfigHandler(configService *admin.AdminConfigService) *ConfigHandler {
 func (h *ConfigHandler) List(c fuego.ContextNoBody) (*response.APIResponse[[]adminmodel.AdminConfigResponse], error) {
 	result, err := h.configService.List(c.Context())
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "list failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(result), nil
 }
@@ -34,13 +34,13 @@ func (h *ConfigHandler) GetByKey(c fuego.ContextNoBody) (*response.APIResponse[a
 
 	result, err := h.configService.GetByKey(c.Context(), key)
 	if err != nil {
-		return nil, fuego.NotFoundError{Title: "not found", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(*result), nil
 }
 
 // Update 更新配置
-func (h *ConfigHandler) Update(c fuego.ContextWithBody[adminmodel.AdminConfigUpdateRequest]) (*response.APIResponse[any], error) {
+func (h *ConfigHandler) Update(c fuego.ContextWithBody[adminmodel.AdminConfigUpdateRequest]) (*response.APIResponse[response.SimpleResponse], error) {
 	key := c.QueryParam("key")
 	if key == "" {
 		return nil, fuego.BadRequestError{Title: "invalid key", Detail: "配置键不能为空"}
@@ -52,7 +52,7 @@ func (h *ConfigHandler) Update(c fuego.ContextWithBody[adminmodel.AdminConfigUpd
 	}
 
 	if err := h.configService.Update(c.Context(), key, &body); err != nil {
-		return nil, fuego.InternalServerError{Title: "update failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
-	return response.OK[any](nil), nil
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }

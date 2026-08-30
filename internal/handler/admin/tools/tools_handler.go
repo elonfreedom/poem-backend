@@ -10,7 +10,7 @@ import (
 
 // ToolsHandler 工具模块处理器
 type ToolsHandler struct {
-	poemService  *admin.AdminPoemService
+	poemService   *admin.AdminPoemService
 	authorService *admin.AdminAuthorService
 }
 
@@ -32,9 +32,24 @@ type BatchConvertSimplifiedResponse struct {
 func (h *ToolsHandler) BatchConvertSimplified(c fuego.ContextNoBody) (*response.APIResponse[BatchConvertSimplifiedResponse], error) {
 	processed, err := h.poemService.EnsureSimplifiedForAllPoems(c.Context())
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "批量生成简体失败", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(BatchConvertSimplifiedResponse{Processed: processed}), nil
+}
+
+// BatchGeneratePinyinResponse 批量生成拼音响应
+type BatchGeneratePinyinResponse struct {
+	Processed int `json:"processed" description:"成功处理记录数"`
+}
+
+// BatchGeneratePinyin 一键为存量诗歌生成拼音
+// 扫描 title_pinyin 为空的记录，自动生成拼音字段（带声调）
+func (h *ToolsHandler) BatchGeneratePinyin(c fuego.ContextNoBody) (*response.APIResponse[BatchGeneratePinyinResponse], error) {
+	processed, err := h.poemService.EnsurePinyinForAllPoems(c.Context())
+	if err != nil {
+		return nil, err // 透传 Service 错误
+	}
+	return response.OK(BatchGeneratePinyinResponse{Processed: processed}), nil
 }
 
 // GenerateAuthorsFromPoems 从已有诗歌作品中提取所有不重复的作者名，自动创建作者记录
@@ -42,7 +57,7 @@ func (h *ToolsHandler) BatchConvertSimplified(c fuego.ContextNoBody) (*response.
 func (h *ToolsHandler) GenerateAuthorsFromPoems(c fuego.ContextNoBody) (*response.APIResponse[adminmodel.AdminToolGenerateAuthorsResponse], error) {
 	result, err := h.authorService.GenerateAuthorsFromPoems(c.Context())
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "提取作者失败", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(*result), nil
 }

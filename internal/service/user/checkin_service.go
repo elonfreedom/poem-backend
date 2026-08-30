@@ -5,20 +5,35 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-fuego/fuego"
+
 	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
 )
 
 type CheckinService struct {
-	checkinRepo *repository.CheckinRepository
+	checkinRepo     *repository.CheckinRepository
+	readingPlanRepo *repository.ReadingPlanRepository
 }
 
-func NewCheckinService(checkinRepo *repository.CheckinRepository) *CheckinService {
-	return &CheckinService{checkinRepo: checkinRepo}
+func NewCheckinService(checkinRepo *repository.CheckinRepository, readingPlanRepo *repository.ReadingPlanRepository) *CheckinService {
+	return &CheckinService{
+		checkinRepo:     checkinRepo,
+		readingPlanRepo: readingPlanRepo,
+	}
 }
 
-// Checkin 打卡
+// Checkin 打卡（需有活跃阅读计划）
 func (s *CheckinService) Checkin(ctx context.Context, userID string, date string, poemID *int64) (*usermodel.CheckInResponse, error) {
+	// 校验：用户必须有活跃的阅读计划才能打卡
+	activePlan, err := s.readingPlanRepo.GetActiveByUserID(ctx, userID)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询阅读计划失败: %v", err)}
+	}
+	if activePlan == nil {
+		return nil, fuego.BadRequestError{Title: "no active plan", Detail: "请先创建阅读计划后再打卡"}
+	}
+
 	// 解析日期，默认今天
 	checkinDate := time.Now()
 	if date != "" {
@@ -57,7 +72,7 @@ func (s *CheckinService) Checkin(ctx context.Context, userID string, date string
 		checkin.PoemID = poemID
 	}
 	if err := s.checkinRepo.Create(ctx, checkin); err != nil {
-		return nil, fmt.Errorf("failed to checkin: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("打卡失败: %v", err)}
 	}
 
 	// 更新统计
@@ -75,7 +90,7 @@ func (s *CheckinService) Checkin(ctx context.Context, userID string, date string
 	stats.LastCheckIn = checkinDate
 
 	if err := s.checkinRepo.UpsertStats(ctx, stats); err != nil {
-		return nil, fmt.Errorf("failed to update stats: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新打卡统计失败: %v", err)}
 	}
 
 	return &usermodel.CheckInResponse{
@@ -121,7 +136,7 @@ func (s *CheckinService) GetCheckinList(ctx context.Context, userID string, page
 
 	checkins, total, err := s.checkinRepo.List(ctx, userID, page, pageSize, start, end)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list checkins: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询打卡记录失败: %v", err)}
 	}
 
 	var list []usermodel.CheckInResponse
@@ -129,6 +144,8 @@ func (s *CheckinService) GetCheckinList(ctx context.Context, userID string, page
 		list = append(list, usermodel.CheckInResponse{
 			Date:           c.Date,
 			ConsecutiveDay: c.ConsecutiveDay,
+			PoemID:         c.PoemID,
+			PoemTitle:      c.PoemTitle,
 		})
 	}
 
@@ -142,7 +159,7 @@ func (s *CheckinService) GetCheckinList(ctx context.Context, userID string, page
 func (s *CheckinService) GetCalendar(ctx context.Context, userID string, year, month int) (*usermodel.CheckInCalendarResponse, error) {
 	days, err := s.checkinRepo.GetCheckInDates(ctx, userID, year, month)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get calendar: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询打卡日历失败: %v", err)}
 	}
 
 	// 构建打卡日期集合
@@ -175,7 +192,7 @@ func (s *CheckinService) GetCalendar(ctx context.Context, userID string, year, m
 func (s *CheckinService) GetRanking(ctx context.Context, userID string) (*usermodel.RankingResponse, error) {
 	items, err := s.checkinRepo.GetRanking(ctx, 100)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ranking: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询排行榜失败: %v", err)}
 	}
 
 	// 获取用户自己的排名和连续天数

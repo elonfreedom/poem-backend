@@ -21,6 +21,8 @@ func CORSMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Session-ID")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Max-Age", "86400")
+		// 显式暴露自定义响应头，允许前端 JS 读取
+		w.Header().Set("Access-Control-Expose-Headers", "X-Timestamps, X-Cache, X-Request-Id")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)

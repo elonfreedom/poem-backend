@@ -2,6 +2,9 @@ package admin
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/go-fuego/fuego"
 
 	adminmodel "poem-backend/internal/model/admin"
 	"poem-backend/internal/repository"
@@ -20,7 +23,7 @@ func (s *AdminStatsService) Overview(ctx context.Context) (*adminmodel.AdminStat
 	totalPoems, totalUsers, totalViews, todayActive, todayCheckin, err :=
 		s.statsRepo.GetOverview(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询总览统计失败: %v", err)}
 	}
 
 	return &adminmodel.AdminStatsOverview{
@@ -36,7 +39,7 @@ func (s *AdminStatsService) Overview(ctx context.Context) (*adminmodel.AdminStat
 func (s *AdminStatsService) Daily(ctx context.Context, days int) ([]adminmodel.AdminStatsDaily, error) {
 	results, err := s.statsRepo.GetDailyStats(ctx, days)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询每日统计失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminStatsDaily, 0, len(results))
@@ -54,7 +57,7 @@ func (s *AdminStatsService) Daily(ctx context.Context, days int) ([]adminmodel.A
 func (s *AdminStatsService) HotPoems(ctx context.Context, limit int) ([]adminmodel.AdminStatsHotPoem, error) {
 	results, err := s.statsRepo.GetHotPoems(ctx, limit)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询热门诗歌失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminStatsHotPoem, 0, len(results))
@@ -73,7 +76,7 @@ func (s *AdminStatsService) HotPoems(ctx context.Context, limit int) ([]adminmod
 func (s *AdminStatsService) UserGrowth(ctx context.Context, days int) ([]adminmodel.AdminStatsUserGrowth, error) {
 	results, err := s.statsRepo.GetUserGrowth(ctx, days)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户增长失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminStatsUserGrowth, 0, len(results))

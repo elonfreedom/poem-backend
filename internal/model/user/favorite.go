@@ -12,6 +12,7 @@ type Favorite struct {
 // FavoriteResponse 收藏响应
 type FavoriteResponse struct {
 	Poem      PoemListItem `json:"poem" description:"诗歌信息"`
+	Available bool         `json:"available" description:"诗歌是否仍可阅读（false=已下架）"`
 	CreatedAt time.Time    `json:"created_at" description:"收藏时间"`
 }
 

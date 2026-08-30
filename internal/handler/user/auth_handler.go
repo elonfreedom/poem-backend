@@ -60,7 +60,7 @@ type BeginRegistrationResponse struct {
 }
 
 // BeginRegistration 开始注册
-func (h *AuthHandler) BeginRegistration(c fuego.ContextWithBody[BeginRegistrationRequest]) (map[string]any, error) {
+func (h *AuthHandler) BeginRegistration(c fuego.ContextWithBody[BeginRegistrationRequest]) (*response.APIResponse[any], error) {
 	body, err := c.Body()
 	if err != nil {
 		return nil, errorcode.BodyMalformed(err).ToFuegoError()
@@ -88,7 +88,7 @@ func (h *AuthHandler) BeginRegistration(c fuego.ContextWithBody[BeginRegistratio
 // FinishRegistration 完成注册
 // 请求体：标准 RegistrationResponseJSON（id, rawId, response: {clientDataJSON, attestationObject, ...}）
 // 会话 ID：通过 X-Session-ID header 传递
-func (h *AuthHandler) FinishRegistration(c fuego.ContextNoBody) (map[string]any, error) {
+func (h *AuthHandler) FinishRegistration(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	// 从 header 获取 session_id
 	sessionID := c.Header("X-Session-ID")
 	if sessionID == "" {
@@ -127,7 +127,7 @@ type BeginLoginResponse struct {
 }
 
 // BeginLogin 开始登录（无需请求体）
-func (h *AuthHandler) BeginLogin(c fuego.ContextNoBody) (map[string]any, error) {
+func (h *AuthHandler) BeginLogin(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	options, session, sessionID, err := h.AuthService.BeginLogin(c.Context())
 	if err != nil {
 		return nil, err
@@ -153,7 +153,7 @@ type authResponseCredential struct {
 // FinishLogin 完成登录
 // 请求体：标准 AuthenticationResponseJSON（id, rawId, response: {clientDataJSON, authenticatorData, signature, ...}）
 // 会话 ID：通过 X-Session-ID header 传递
-func (h *AuthHandler) FinishLogin(c fuego.ContextNoBody) (map[string]any, error) {
+func (h *AuthHandler) FinishLogin(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	// 从 header 获取 session_id
 	sessionID := c.Header("X-Session-ID")
 	if sessionID == "" {
@@ -246,7 +246,7 @@ type AddDeviceBeginResponse struct {
 
 // AddDeviceBegin 开始添加新设备（设备 A 调用）
 // 生成连接令牌和 WebAuthn 注册选项
-func (h *AuthHandler) AddDeviceBegin(c fuego.ContextWithBody[AddDeviceBeginRequest]) (map[string]any, error) {
+func (h *AuthHandler) AddDeviceBegin(c fuego.ContextWithBody[AddDeviceBeginRequest]) (*response.APIResponse[any], error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, errorcode.Unauthorized().ToFuegoError()
@@ -268,7 +268,7 @@ func (h *AuthHandler) AddDeviceBegin(c fuego.ContextWithBody[AddDeviceBeginReque
 		Token:           token,
 		UserID:          userID,
 		Status:          ConnectionStatusWaiting,
-		WebAuthnSession: session,  // webauthn.SessionData（finish 时验证 credential）
+		WebAuthnSession: session, // webauthn.SessionData（finish 时验证 credential）
 		WebAuthnOptions: options, // protocol.CredentialCreation（设备 B 创建 credential）
 		CreatedAt:       time.Now(),
 		ExpiresAt:       expiresAt,
@@ -283,12 +283,13 @@ func (h *AuthHandler) AddDeviceBegin(c fuego.ContextWithBody[AddDeviceBeginReque
 
 // AddDeviceStatusResponse 查询连接状态响应
 type AddDeviceStatusResponse struct {
-	Status      string `json:"status" description:"连接状态：waiting/connected/confirmed/rejected/expired"`
+	Status     string `json:"status" description:"连接状态：waiting/connected/confirmed/rejected/expired"`
 	DeviceName string `json:"device_name" description:"新设备名称（connected 时返回）"`
 }
 
-// AddDeviceStatus 查询连接状态（设备 A 轮询）
-func (h *AuthHandler) AddDeviceStatus(c fuego.ContextNoBody) (map[string]any, error) {
+// AddDeviceStatus 查询连接状态（设备 A 长轮询）
+// 当状态立即返回时直接响应；否则持有连接直到状态变化或 30s 超时
+func (h *AuthHandler) AddDeviceStatus(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, errorcode.Unauthorized().ToFuegoError()
@@ -314,44 +315,79 @@ func (h *AuthHandler) AddDeviceStatus(c fuego.ContextNoBody) (map[string]any, er
 		return response.Success(AddDeviceStatusResponse{Status: string(ConnectionStatusExpired)}), nil
 	}
 
-	resp := AddDeviceStatusResponse{
-		Status: string(conn.Status),
+	// 长轮询：等待状态变化或超时
+	statusCh, cleanup := h.ConnectionStore.Subscribe(token, connectionLongPollTimeout)
+	defer cleanup()
+
+	newStatus := <-statusCh
+	if newStatus == ConnectionStatusTimeout {
+		// 超时：返回当前状态
+		conn, ok = h.ConnectionStore.Get(token)
+		if !ok {
+			return response.Success(AddDeviceStatusResponse{Status: string(ConnectionStatusExpired)}), nil
+		}
+		resp := AddDeviceStatusResponse{Status: string(conn.Status)}
+		if conn.Status == ConnectionStatusConnected || conn.Status == ConnectionStatusConfirmed {
+			resp.DeviceName = conn.DeviceName
+		}
+		return response.Success(resp), nil
 	}
-	if conn.Status == ConnectionStatusConnected || conn.Status == ConnectionStatusConfirmed {
-		resp.DeviceName = conn.DeviceName
+
+	// 状态变化：返回新状态
+	resp := AddDeviceStatusResponse{Status: string(newStatus)}
+	if newStatus == ConnectionStatusConnected || newStatus == ConnectionStatusConfirmed {
+		if conn, ok := h.ConnectionStore.Get(token); ok {
+			resp.DeviceName = conn.DeviceName
+		}
 	}
 	return response.Success(resp), nil
 }
 
-// AddDeviceStatusPublic 查询连接状态（公开接口，设备 B 轮询）
+// AddDeviceStatusPublic 查询连接状态（公开接口，设备 B 长轮询）
 // 无需认证，仅通过 token 查询
-// 返回统一格式：{code, message, data: {status, device_name}}
-func (h *AuthHandler) AddDeviceStatusPublic(c fuego.ContextNoBody) (map[string]any, error) {
+// 当状态立即返回时直接响应；否则持有连接直到状态变化或 30s 超时
+func (h *AuthHandler) AddDeviceStatusPublic(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	token := c.QueryParam("token")
 	if token == "" {
 		return nil, errorcode.QueryRequired("token").ToFuegoError()
 	}
 
 	conn, ok := h.ConnectionStore.Get(token)
-	status := ConnectionStatusExpired
-	if ok {
-		// 检查是否过期
-		if !time.Now().After(conn.ExpiresAt) {
-			status = conn.Status
-			// 设备 B 轮询时更新心跳（waiting/connected 状态才更新）
-			if status == ConnectionStatusWaiting || status == ConnectionStatusConnected {
-				h.ConnectionStore.UpdateHeartbeat(token)
-			}
+	if !ok || time.Now().After(conn.ExpiresAt) {
+		return response.Success(map[string]any{"status": string(ConnectionStatusExpired)}), nil
+	}
+
+	// 设备 B 首次访问时更新心跳
+	status := conn.Status
+	if status == ConnectionStatusWaiting || status == ConnectionStatusConnected {
+		h.ConnectionStore.UpdateHeartbeat(token)
+	}
+
+	// 长轮询：等待状态变化或超时
+	statusCh, cleanup := h.ConnectionStore.Subscribe(token, connectionLongPollTimeout)
+	defer cleanup()
+
+	newStatus := <-statusCh
+	if newStatus == ConnectionStatusTimeout {
+		// 超时：返回当前状态
+		conn, ok := h.ConnectionStore.Get(token)
+		if !ok || time.Now().After(conn.ExpiresAt) {
+			return response.Success(map[string]any{"status": string(ConnectionStatusExpired)}), nil
+		}
+		data := map[string]any{"status": string(conn.Status)}
+		if conn.Status == ConnectionStatusConnected || conn.Status == ConnectionStatusConfirmed {
+			data["device_name"] = conn.DeviceName
+		}
+		return response.Success(data), nil
+	}
+
+	// 状态变化：返回新状态
+	data := map[string]any{"status": string(newStatus)}
+	if newStatus == ConnectionStatusConnected || newStatus == ConnectionStatusConfirmed {
+		if conn, ok := h.ConnectionStore.Get(token); ok {
+			data["device_name"] = conn.DeviceName
 		}
 	}
-
-	data := map[string]any{
-		"status": string(status),
-	}
-	if status == ConnectionStatusConnected || status == ConnectionStatusConfirmed {
-		data["device_name"] = conn.DeviceName
-	}
-
 	return response.Success(data), nil
 }
 
@@ -362,7 +398,7 @@ type AddDeviceConnectRequest struct {
 }
 
 // AddDeviceConnect 设备 B 连接（扫码后调用）
-func (h *AuthHandler) AddDeviceConnect(c fuego.ContextWithBody[AddDeviceConnectRequest]) (map[string]any, error) {
+func (h *AuthHandler) AddDeviceConnect(c fuego.ContextWithBody[AddDeviceConnectRequest]) (*response.APIResponse[any], error) {
 	body, err := c.Body()
 	if err != nil {
 		return nil, errorcode.BodyMalformed(err).ToFuegoError()
@@ -407,7 +443,7 @@ type AddDeviceConfirmRequest struct {
 }
 
 // AddDeviceConfirm 设备 A 确认/拒绝授权
-func (h *AuthHandler) AddDeviceConfirm(c fuego.ContextWithBody[AddDeviceConfirmRequest]) (map[string]any, error) {
+func (h *AuthHandler) AddDeviceConfirm(c fuego.ContextWithBody[AddDeviceConfirmRequest]) (*response.APIResponse[any], error) {
 	userID := middleware.GetUserIDFromContext(c.Context())
 	if userID == "" {
 		return nil, errorcode.Unauthorized().ToFuegoError()
@@ -439,14 +475,14 @@ func (h *AuthHandler) AddDeviceConfirm(c fuego.ContextWithBody[AddDeviceConfirmR
 		h.ConnectionStore.Update(body.Token, func(c *Connection) {
 			c.Status = ConnectionStatusConfirmed
 		})
-		return response.Success(map[string]string{"status": "confirmed", "message": "已确认授权"}), nil
+		return response.Success(StatusResponse{Status: "confirmed", Message: "已确认授权"}), nil
 	}
 
 	// 拒绝
 	h.ConnectionStore.Update(body.Token, func(c *Connection) {
 		c.Status = ConnectionStatusRejected
 	})
-	return response.Success(map[string]string{"status": "rejected", "message": "已拒绝"}), nil
+	return response.Success(StatusResponse{Status: "rejected", Message: "已拒绝"}), nil
 }
 
 // AddDeviceRejectRequest 设备 B 拒绝/放弃请求（公开接口）
@@ -456,7 +492,7 @@ type AddDeviceRejectRequest struct {
 
 // AddDeviceReject 设备 B 主动放弃创建 Passkey（公开接口）
 // 无需认证，设备 B 点击"取消"或关闭页面时调用
-func (h *AuthHandler) AddDeviceReject(c fuego.ContextWithBody[AddDeviceRejectRequest]) (map[string]any, error) {
+func (h *AuthHandler) AddDeviceReject(c fuego.ContextWithBody[AddDeviceRejectRequest]) (*response.APIResponse[any], error) {
 	body, err := c.Body()
 	if err != nil {
 		return nil, errorcode.BodyMalformed(err).ToFuegoError()
@@ -482,7 +518,7 @@ func (h *AuthHandler) AddDeviceReject(c fuego.ContextWithBody[AddDeviceRejectReq
 		c.Status = ConnectionStatusRejected
 	})
 
-	return response.Success(map[string]string{"status": "rejected", "message": "设备 B 已取消"}), nil
+	return response.Success(StatusResponse{Status: "rejected", Message: "设备 B 已取消"}), nil
 }
 
 // AddDeviceFinishRequest 新设备完成注册请求
@@ -493,7 +529,7 @@ type AddDeviceFinishRequest struct {
 }
 
 // AddDeviceFinish 新设备完成注册（设备 B 调用）
-func (h *AuthHandler) AddDeviceFinish(c fuego.ContextWithBody[AddDeviceFinishRequest]) (map[string]any, error) {
+func (h *AuthHandler) AddDeviceFinish(c fuego.ContextWithBody[AddDeviceFinishRequest]) (*response.APIResponse[any], error) {
 	body, err := c.Body()
 	if err != nil {
 		return nil, errorcode.BodyMalformed(err).ToFuegoError()

@@ -293,73 +293,8 @@ func (r *SharedPlanRepository) GetMySubscriptions(ctx context.Context, userID st
 	return list, rows.Err()
 }
 
-// ==================== 打卡记录 ====================
-
-// CreateCheckin 创建打卡记录
-func (r *SharedPlanRepository) CreateCheckin(ctx context.Context, checkin *usermodel.PlanCheckin) error {
-	query := `
-		INSERT INTO plan_checkins (subscription_id, user_id, day_number, checkin_date, poem_ids, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (subscription_id, day_number) DO UPDATE SET
-			poem_ids = EXCLUDED.poem_ids,
-			checkin_date = EXCLUDED.checkin_date
-		RETURNING id
-	`
-	return r.db.QueryRow(ctx, query,
-		checkin.SubscriptionID, checkin.UserID, checkin.DayNumber, checkin.CheckinDate, checkin.PoemIDs, checkin.CreatedAt,
-	).Scan(&checkin.ID)
-}
-
-// GetCheckinByDay 获取某天的打卡记录
-func (r *SharedPlanRepository) GetCheckinByDay(ctx context.Context, subscriptionID int64, dayNumber int) (*usermodel.PlanCheckin, error) {
-	query := `
-		SELECT id, subscription_id, user_id, day_number, checkin_date, poem_ids, created_at
-		FROM plan_checkins WHERE subscription_id = $1 AND day_number = $2
-	`
-	row := r.db.QueryRow(ctx, query, subscriptionID, dayNumber)
-	var c usermodel.PlanCheckin
-	err := row.Scan(&c.ID, &c.SubscriptionID, &c.UserID, &c.DayNumber, &c.CheckinDate, &c.PoemIDs, &c.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
-// GetCheckinsBySubscription 获取订阅的所有打卡记录
-func (r *SharedPlanRepository) GetCheckinsBySubscription(ctx context.Context, subscriptionID int64) ([]usermodel.PlanCheckin, error) {
-	query := `
-		SELECT id, subscription_id, user_id, day_number, checkin_date, poem_ids, created_at
-		FROM plan_checkins WHERE subscription_id = $1
-		ORDER BY day_number
-	`
-	rows, err := r.db.Query(ctx, query, subscriptionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []usermodel.PlanCheckin
-	for rows.Next() {
-		var c usermodel.PlanCheckin
-		err := rows.Scan(&c.ID, &c.SubscriptionID, &c.UserID, &c.DayNumber, &c.CheckinDate, &c.PoemIDs, &c.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		list = append(list, c)
-	}
-	return list, rows.Err()
-}
-
-// CountCheckins 统计打卡天数
-func (r *SharedPlanRepository) CountCheckins(ctx context.Context, subscriptionID int64) (int, error) {
-	var count int
-	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM plan_checkins WHERE subscription_id = $1`, subscriptionID).Scan(&count)
-	return count, err
-}
-
-// GetLastCheckinByPoem 获取用户对某诗文的最新打卡记录
+// GetLastCheckinByPoem 从 reading_progress 获取用户对某诗文的最新打卡记录（自建计划）
 func (r *SharedPlanRepository) GetLastCheckinByPoem(ctx context.Context, userID string, poemID int64) (date string, planTitle string, daysAgo int, err error) {
-	// 从 reading_progress 查询该用户+该诗文的最新打卡记录
 	query := `
 		SELECT rp.date, sp.title
 		FROM reading_progress rp
@@ -368,33 +303,6 @@ func (r *SharedPlanRepository) GetLastCheckinByPoem(ctx context.Context, userID 
 		LEFT JOIN shared_plans sp ON rpl.shared_plan_id = sp.id
 		WHERE rp.user_id = $1 AND pid = $2
 		ORDER BY rp.date DESC
-		LIMIT 1
-	`
-	var checkinDate string
-	var title *string
-	err = r.db.QueryRow(ctx, query, userID, poemID).Scan(&checkinDate, &title)
-	if err != nil {
-		return "", "", 0, err
-	}
-	if title != nil {
-		planTitle = *title
-	}
-	// 计算 days_ago
-	parsedDate, _ := time.Parse("2006-01-02", checkinDate)
-	daysAgo = int(time.Since(parsedDate).Hours() / 24)
-	return checkinDate, planTitle, daysAgo, nil
-}
-
-// GetLastCheckinByPoemFromPlanCheckins 从 plan_checkins 获取用户对某诗文的最新打卡记录
-func (r *SharedPlanRepository) GetLastCheckinByPoemFromPlanCheckins(ctx context.Context, userID string, poemID int64) (date string, planTitle string, daysAgo int, err error) {
-	query := `
-		SELECT pc.checkin_date, sp.title
-		FROM plan_checkins pc
-		JOIN plan_subscriptions ps ON pc.subscription_id = ps.id
-		JOIN shared_plans sp ON ps.shared_plan_id = sp.id
-		CROSS JOIN LATERAL unnest(pc.poem_ids) AS pid
-		WHERE pc.user_id = $1 AND pid = $2
-		ORDER BY pc.checkin_date DESC
 		LIMIT 1
 	`
 	var checkinDate string

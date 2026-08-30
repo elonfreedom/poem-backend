@@ -2,8 +2,12 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/go-fuego/fuego"
+	"github.com/jackc/pgx/v5"
 
 	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
@@ -28,7 +32,10 @@ func NewUserService(
 func (s *UserService) GetProfile(ctx context.Context, userID string) (*usermodel.UserResponse, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "user not found", Detail: fmt.Sprintf("用户不存在: id=%s", userID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户失败: %v", err)}
 	}
 
 	resp := user.ToResponse()
@@ -39,7 +46,10 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (*usermodel
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, req *usermodel.UpdateProfileRequest) (*usermodel.UserResponse, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "user not found", Detail: fmt.Sprintf("用户不存在: id=%s", userID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询用户失败: %v", err)}
 	}
 
 	if req.Nickname != "" {
@@ -48,7 +58,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, req *use
 	}
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
-		return nil, fmt.Errorf("failed to update user: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新用户失败: %v", err)}
 	}
 
 	resp := user.ToResponse()
@@ -60,17 +70,20 @@ func (s *UserService) BindEmail(ctx context.Context, userID string, email string
 	// 检查邮箱是否已被绑定
 	existing, err := s.userRepo.GetByEmail(ctx, email)
 	if err == nil && existing != nil && existing.ID != userID {
-		return fmt.Errorf("email already bound to another account")
+		return fuego.BadRequestError{Title: "email conflict", Detail: "邮箱已被其他账户绑定"}
 	}
 
-	return s.userRepo.UpdateEmail(ctx, userID, &email)
+	if err := s.userRepo.UpdateEmail(ctx, userID, &email); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("绑定邮箱失败: %v", err)}
+	}
+	return nil
 }
 
 // GetPasskeys 获取 Passkey 列表
 func (s *UserService) GetPasskeys(ctx context.Context, userID string) ([]usermodel.PasskeyResponse, error) {
 	passkeys, err := s.passkeyRepo.GetByUserID(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询 Passkey 失败: %v", err)}
 	}
 
 	var responses []usermodel.PasskeyResponse
@@ -85,11 +98,14 @@ func (s *UserService) DeletePasskey(ctx context.Context, userID string, passkeyI
 	// 检查是否至少保留一个 Passkey
 	count, err := s.passkeyRepo.CountByUserID(ctx, userID)
 	if err != nil {
-		return err
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询 Passkey 数量失败: %v", err)}
 	}
 	if count <= 1 {
-		return fmt.Errorf("cannot delete the last passkey")
+		return fuego.BadRequestError{Title: "last passkey", Detail: "至少保留一个 Passkey"}
 	}
 
-	return s.passkeyRepo.Delete(ctx, passkeyID, userID)
+	if err := s.passkeyRepo.Delete(ctx, passkeyID, userID); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("删除 Passkey 失败: %v", err)}
+	}
+	return nil
 }

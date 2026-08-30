@@ -21,8 +21,8 @@ func NewPoemRepository(db *pgxpool.Pool) *PoemRepository {
 func (r *PoemRepository) Create(ctx context.Context, poem *model.Poem) error {
 	query := `
 		INSERT INTO poems (title, author, dynasty, content, translation, appreciation, source, tags, cover_url, status, created_by, created_at, updated_at,
-		                   title_pinyin, content_pinyin, title_sc, author_sc, content_sc, author_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+		                   title_pinyin, content_pinyin, title_sc, author_sc, content_sc, translation_sc, appreciation_sc, author_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		RETURNING id
 	`
 	return r.db.QueryRow(ctx, query,
@@ -30,6 +30,7 @@ func (r *PoemRepository) Create(ctx context.Context, poem *model.Poem) error {
 		poem.Translation, poem.Appreciation, poem.Source, poem.Tags, poem.CoverURL,
 		poem.Status, poem.CreatedBy, poem.CreatedAt, poem.UpdatedAt,
 		poem.TitlePinyin, poem.ContentPinyin, poem.TitleSC, poem.AuthorSC, poem.ContentSC,
+		poem.TranslationSC, poem.AppreciationSC,
 		poem.AuthorID,
 	).Scan(&poem.ID)
 }
@@ -60,30 +61,31 @@ func (r *PoemRepository) List(ctx context.Context, page, pageSize int, categoryI
 		argIdx++
 	}
 	if status != "" {
-		where += " AND status = $" + string(rune('0'+argIdx))
+		where += " AND p.status = $" + string(rune('0'+argIdx))
 		args = append(args, status)
 		argIdx++
 	}
 	if dynasty != "" {
-		where += " AND dynasty = $" + string(rune('0'+argIdx))
+		where += " AND COALESCE(a.dynasty, p.dynasty) = $" + string(rune('0'+argIdx))
 		args = append(args, dynasty)
 		argIdx++
 	}
 
 	// 获取总数
-	countQuery := "SELECT COUNT(*) FROM poems " + where
+	countQuery := "SELECT COUNT(*) FROM poems p LEFT JOIN authors a ON p.author_id = a.id " + where
 	var total int64
 	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// 获取列表
+	// 获取列表（JOIN authors 表，以作者朝代为准）
 	query := `
-		SELECT id, title, author, dynasty, content, translation, appreciation, source, category_id, tags, cover_url, status, created_by, created_at, updated_at,
-		       title_pinyin, content_pinyin, title_sc, author_sc, content_sc, author_id
-		FROM poems ` + where + `
-		ORDER BY created_at DESC
+		SELECT p.id, p.title, p.author, COALESCE(a.dynasty, p.dynasty) AS dynasty, p.content, p.translation, p.appreciation, p.source, p.category_id, p.tags, p.cover_url, p.status, p.created_by, p.created_at, p.updated_at,
+		       p.title_pinyin, p.content_pinyin, p.title_sc, p.author_sc, p.content_sc, p.translation_sc, p.appreciation_sc, p.author_id
+		FROM poems p
+		LEFT JOIN authors a ON p.author_id = a.id ` + where + `
+		ORDER BY p.created_at DESC
 		LIMIT $` + string(rune('0'+argIdx)) + ` OFFSET $` + string(rune('0'+argIdx+1))
 	args = append(args, pageSize, (page-1)*pageSize)
 
@@ -99,7 +101,8 @@ func (r *PoemRepository) List(ctx context.Context, page, pageSize int, categoryI
 		err := rows.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
 			&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.Tags, &p.CoverURL,
 			&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
-			&p.TitlePinyin, &p.ContentPinyin, &p.TitleSC, &p.AuthorSC, &p.ContentSC, &p.AuthorID)
+			&p.TitlePinyin, &p.ContentPinyin, &p.TitleSC, &p.AuthorSC, &p.ContentSC,
+			&p.TranslationSC, &p.AppreciationSC, &p.AuthorID)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -108,33 +111,36 @@ func (r *PoemRepository) List(ctx context.Context, page, pageSize int, categoryI
 	return poems, total, rows.Err()
 }
 
-// GetByID 根据 ID 获取诗歌
+// GetByID 根据 ID 获取诗歌（JOIN authors 表，以作者朝代为准）
 func (r *PoemRepository) GetByID(ctx context.Context, id int64) (*model.Poem, error) {
 	query := `
-		SELECT id, title, author, dynasty, content, translation, appreciation, source, category_id, tags, cover_url, status, created_by, created_at, updated_at,
-		       title_pinyin, content_pinyin, title_sc, author_sc, content_sc, author_id
-		FROM poems WHERE id = $1
+		SELECT p.id, p.title, p.author, COALESCE(a.dynasty, p.dynasty) AS dynasty, p.content, p.translation, p.appreciation, p.source, p.category_id, p.tags, p.cover_url, p.status, p.created_by, p.created_at, p.updated_at,
+		       p.title_pinyin, p.content_pinyin, p.title_sc, p.author_sc, p.content_sc, p.translation_sc, p.appreciation_sc, p.author_id
+		FROM poems p
+		LEFT JOIN authors a ON p.author_id = a.id
+		WHERE p.id = $1
 	`
 	row := r.db.QueryRow(ctx, query, id)
 	var p model.Poem
 	err := row.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
 		&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.Tags, &p.CoverURL,
 		&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
-		&p.TitlePinyin, &p.ContentPinyin, &p.TitleSC, &p.AuthorSC, &p.ContentSC, &p.AuthorID)
+		&p.TitlePinyin, &p.ContentPinyin, &p.TitleSC, &p.AuthorSC, &p.ContentSC,
+		&p.TranslationSC, &p.AppreciationSC, &p.AuthorID)
 	if err != nil {
 		return nil, err
 	}
 	return &p, nil
 }
 
-// Search 搜索诗歌
+// Search 搜索诗歌（JOIN authors 表，以作者朝代为准）
 func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageSize int) ([]model.Poem, int64, error) {
-	where := `WHERE status = 'published' AND (title ILIKE $1 OR author ILIKE $2 OR content ILIKE $3)`
+	where := `WHERE p.status = 'published' AND (p.title ILIKE $1 OR p.author ILIKE $2 OR p.content ILIKE $3)`
 	likePattern := "%" + keyword + "%"
 	args := []interface{}{likePattern, likePattern, likePattern}
 
 	// 获取总数
-	countQuery := "SELECT COUNT(*) FROM poems " + where
+	countQuery := "SELECT COUNT(*) FROM poems p LEFT JOIN authors a ON p.author_id = a.id " + where
 	var total int64
 	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
@@ -143,10 +149,11 @@ func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageS
 
 	// 获取列表
 	query := `
-		SELECT id, title, author, dynasty, content, translation, appreciation, source, category_id, tags, cover_url, status, created_by, created_at, updated_at,
-		       title_pinyin, content_pinyin, title_sc, author_sc, content_sc, author_id
-		FROM poems ` + where + `
-		ORDER BY created_at DESC
+		SELECT p.id, p.title, p.author, COALESCE(a.dynasty, p.dynasty) AS dynasty, p.content, p.translation, p.appreciation, p.source, p.category_id, p.tags, p.cover_url, p.status, p.created_by, p.created_at, p.updated_at,
+		       p.title_pinyin, p.content_pinyin, p.title_sc, p.author_sc, p.content_sc, p.translation_sc, p.appreciation_sc, p.author_id
+		FROM poems p
+		LEFT JOIN authors a ON p.author_id = a.id ` + where + `
+		ORDER BY p.created_at DESC
 		LIMIT $4 OFFSET $5
 	`
 	args = append(args, pageSize, (page-1)*pageSize)
@@ -163,7 +170,8 @@ func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageS
 		err := rows.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
 			&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.Tags, &p.CoverURL,
 			&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
-			&p.TitlePinyin, &p.ContentPinyin, &p.TitleSC, &p.AuthorSC, &p.ContentSC, &p.AuthorID)
+			&p.TitlePinyin, &p.ContentPinyin, &p.TitleSC, &p.AuthorSC, &p.ContentSC,
+			&p.TranslationSC, &p.AppreciationSC, &p.AuthorID)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -176,9 +184,11 @@ func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageS
 func (r *PoemRepository) GetDailyRecommendation(ctx context.Context) (*model.Poem, error) {
 	// 简单实现：随机获取一首已发布的诗歌
 	query := `
-		SELECT id, title, author, dynasty, content, translation, appreciation, source, category_id, tags, cover_url, status, created_by, created_at, updated_at,
-		       title_pinyin, content_pinyin, title_sc, author_sc, content_sc, author_id
-		FROM poems WHERE status = 'published'
+		SELECT p.id, p.title, p.author, COALESCE(a.dynasty, p.dynasty) AS dynasty, p.content, p.translation, p.appreciation, p.source, p.category_id, p.tags, p.cover_url, p.status, p.created_by, p.created_at, p.updated_at,
+		       p.title_pinyin, p.content_pinyin, p.title_sc, p.author_sc, p.content_sc, p.translation_sc, p.appreciation_sc, p.author_id
+		FROM poems p
+		LEFT JOIN authors a ON p.author_id = a.id
+		WHERE p.status = 'published'
 		ORDER BY RANDOM() LIMIT 1
 	`
 	row := r.db.QueryRow(ctx, query)
@@ -186,7 +196,8 @@ func (r *PoemRepository) GetDailyRecommendation(ctx context.Context) (*model.Poe
 	err := row.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
 		&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.Tags, &p.CoverURL,
 		&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
-		&p.TitlePinyin, &p.ContentPinyin, &p.TitleSC, &p.AuthorSC, &p.ContentSC, &p.AuthorID)
+		&p.TitlePinyin, &p.ContentPinyin, &p.TitleSC, &p.AuthorSC, &p.ContentSC,
+		&p.TranslationSC, &p.AppreciationSC, &p.AuthorID)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +227,7 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 		argIdx++
 	}
 	if dynasty != "" {
-		where += fmt.Sprintf(" AND p.dynasty = $%d", argIdx)
+		where += fmt.Sprintf(" AND COALESCE(a.dynasty, p.dynasty) = $%d", argIdx)
 		args = append(args, dynasty)
 		argIdx++
 	}
@@ -232,7 +243,7 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 		argIdx += 2
 	}
 
-	countQuery := "SELECT COUNT(*) FROM poems p " + where
+	countQuery := "SELECT COUNT(*) FROM poems p LEFT JOIN authors a ON p.author_id = a.id " + where
 	var total int64
 	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
@@ -240,11 +251,13 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 	}
 
 	query := fmt.Sprintf(`
-		SELECT p.id, p.title, p.author, p.dynasty, p.content, p.translation, p.appreciation, p.source,
+		SELECT p.id, p.title, p.author, COALESCE(a.dynasty, p.dynasty) AS dynasty, p.content, p.translation, p.appreciation, p.source,
 		       p.category_id, c.name AS category_name, p.tags, p.cover_url, p.status,
-		       p.created_by, p.created_at, p.updated_at
+		       p.created_by, p.created_at, p.updated_at,
+		       p.title_pinyin, p.content_pinyin, p.title_sc, p.author_sc, p.content_sc, p.translation_sc, p.appreciation_sc
 		FROM poems p
-		LEFT JOIN categories c ON p.category_id = c.id
+		LEFT JOIN authors a ON p.author_id = a.id
+	LEFT JOIN categories c ON p.category_id = c.id
 		%s
 		ORDER BY p.created_at DESC
 		LIMIT $%d OFFSET $%d
@@ -262,7 +275,8 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 		var p PoemWithCategory
 		err := rows.Scan(&p.ID, &p.Title, &p.Author, &p.Dynasty, &p.Content,
 			&p.Translation, &p.Appreciation, &p.Source, &p.CategoryID, &p.CategoryName, &p.Tags, &p.CoverURL,
-			&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
+			&p.Status, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
+			&p.TitlePinyin, &p.ContentPinyin, &p.TitleSC, &p.AuthorSC, &p.ContentSC, &p.TranslationSC, &p.AppreciationSC)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -277,14 +291,16 @@ func (r *PoemRepository) Update(ctx context.Context, poem *model.Poem) error {
 		UPDATE poems SET title = $1, author = $2, dynasty = $3, content = $4,
 			translation = $5, appreciation = $6, source = $7, category_id = $8, tags = $9,
 			cover_url = $10, status = $11, updated_at = $12,
-			title_pinyin = $13, content_pinyin = $14, title_sc = $15, author_sc = $16, content_sc = $17, author_id = $18
-		WHERE id = $19
+			title_pinyin = $13, content_pinyin = $14, title_sc = $15, author_sc = $16, content_sc = $17,
+			translation_sc = $18, appreciation_sc = $19, author_id = $20
+		WHERE id = $21
 	`
 	_, err := r.db.Exec(ctx, query,
 		poem.Title, poem.Author, poem.Dynasty, poem.Content,
 		poem.Translation, poem.Appreciation, poem.Source, poem.CategoryID, poem.Tags,
 		poem.CoverURL, poem.Status, poem.UpdatedAt,
-		poem.TitlePinyin, poem.ContentPinyin, poem.TitleSC, poem.AuthorSC, poem.ContentSC, poem.AuthorID, poem.ID,
+		poem.TitlePinyin, poem.ContentPinyin, poem.TitleSC, poem.AuthorSC, poem.ContentSC,
+		poem.TranslationSC, poem.AppreciationSC, poem.AuthorID, poem.ID,
 	)
 	return err
 }

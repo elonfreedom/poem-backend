@@ -22,7 +22,7 @@ func NewAnnouncementHandler(announcementService *admin.AdminAnnouncementService)
 func (h *AnnouncementHandler) List(c fuego.ContextNoBody) (*response.APIResponse[[]adminmodel.AdminAnnouncementResponse], error) {
 	result, err := h.announcementService.List(c.Context())
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "list failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(result), nil
 }
@@ -36,13 +36,13 @@ func (h *AnnouncementHandler) Create(c fuego.ContextWithBody[adminmodel.AdminAnn
 
 	result, err := h.announcementService.Create(c.Context(), &body)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "create failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(*result), nil
 }
 
 // Update 更新公告
-func (h *AnnouncementHandler) Update(c fuego.ContextWithBody[adminmodel.AdminAnnouncementUpdateRequest]) (*response.APIResponse[any], error) {
+func (h *AnnouncementHandler) Update(c fuego.ContextWithBody[adminmodel.AdminAnnouncementUpdateRequest]) (*response.APIResponse[response.SimpleResponse], error) {
 	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "公告ID必须是数字"}
@@ -54,20 +54,20 @@ func (h *AnnouncementHandler) Update(c fuego.ContextWithBody[adminmodel.AdminAnn
 	}
 
 	if err := h.announcementService.Update(c.Context(), id, &body); err != nil {
-		return nil, fuego.InternalServerError{Title: "update failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
-	return response.OK[any](nil), nil
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }
 
 // Delete 删除公告
-func (h *AnnouncementHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+func (h *AnnouncementHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[response.SimpleResponse], error) {
 	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "公告ID必须是数字"}
 	}
 
 	if err := h.announcementService.Delete(c.Context(), id); err != nil {
-		return nil, fuego.InternalServerError{Title: "delete failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
-	return response.OK[any](nil), nil
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }

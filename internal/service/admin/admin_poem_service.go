@@ -2,7 +2,13 @@ package admin
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 	"time"
+
+	"github.com/go-fuego/fuego"
+	"github.com/jackc/pgx/v5"
 
 	"poem-backend/internal/model"
 	adminmodel "poem-backend/internal/model/admin"
@@ -36,7 +42,7 @@ func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categor
 
 	poems, total, err := s.poemRepo.ListAll(ctx, page, pageSize, categoryID, status, keyword, dynasty, authorID)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询诗歌列表失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminPoemResponse, 0, len(poems))
@@ -50,7 +56,10 @@ func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categor
 func (s *AdminPoemService) GetByID(ctx context.Context, id int64) (*adminmodel.AdminPoemResponse, error) {
 	poem, err := s.poemRepo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "poem not found", Detail: fmt.Sprintf("诗歌不存在: id=%d", id)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询诗歌失败: id=%d, error=%v", id, err)}
 	}
 	resp := toAdminPoemResponse(*poem, nil)
 	return &resp, nil
@@ -59,6 +68,19 @@ func (s *AdminPoemService) GetByID(ctx context.Context, id int64) (*adminmodel.A
 // Create 创建诗歌
 func (s *AdminPoemService) Create(ctx context.Context, req *adminmodel.AdminPoemCreateRequest, createdBy *string) (*adminmodel.AdminPoemResponse, error) {
 	now := time.Now()
+
+	// 校验唯一性：标题+作者+正文首句
+	firstLine := req.Content
+	if idx := strings.IndexAny(req.Content, "\n\r"); idx >= 0 {
+		firstLine = req.Content[:idx]
+	}
+	exists, err := s.poemRepo.ExistsByTitleAuthorFirstLine(ctx, req.Title, req.Author, firstLine)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("检查诗歌唯一性失败: %v", err)}
+	}
+	if exists {
+		return nil, fuego.ConflictError{Title: "poem exists", Detail: "该诗歌已存在（标题+作者+正文首句重复）"}
+	}
 
 	// 生成拼音（如果未提供则自动生成）
 	titlePinyin := req.TitlePinyin
@@ -83,35 +105,45 @@ func (s *AdminPoemService) Create(ctx context.Context, req *adminmodel.AdminPoem
 	if contentSC == "" && req.Content != "" {
 		contentSC = convert.MustTraditionalToSimplified(req.Content)
 	}
+	translationSC := req.TranslationSC
+	if translationSC == "" && req.Translation != "" {
+		translationSC = convert.MustTraditionalToSimplified(req.Translation)
+	}
+	appreciationSC := req.AppreciationSC
+	if appreciationSC == "" && req.Appreciation != "" {
+		appreciationSC = convert.MustTraditionalToSimplified(req.Appreciation)
+	}
 
 	poem := &model.Poem{
-		Title:         req.Title,
-		Author:        req.Author,
-		Dynasty:       req.Dynasty,
-		Content:       req.Content,
-		Translation:   req.Translation,
-		Appreciation:  req.Appreciation,
-		Source:        req.Source,
-		CategoryID:    req.CategoryID,
-		AuthorID:      req.AuthorID,
-		Tags:          req.Tags,
-		CoverURL:      req.CoverURL,
-		Status:        req.Status,
-		CreatedBy:     createdBy,
-		CreatedAt:     now,
-		UpdatedAt:     now,
-		TitlePinyin:   titlePinyin,
-		ContentPinyin: contentPinyin,
-		TitleSC:       titleSC,
-		AuthorSC:      authorSC,
-		ContentSC:     contentSC,
+		Title:          req.Title,
+		Author:         req.Author,
+		Dynasty:        req.Dynasty,
+		Content:        req.Content,
+		Translation:    req.Translation,
+		Appreciation:   req.Appreciation,
+		Source:         req.Source,
+		CategoryID:     req.CategoryID,
+		AuthorID:       req.AuthorID,
+		Tags:           req.Tags,
+		CoverURL:       req.CoverURL,
+		Status:         req.Status,
+		CreatedBy:      createdBy,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		TitlePinyin:    titlePinyin,
+		ContentPinyin:  contentPinyin,
+		TitleSC:        titleSC,
+		AuthorSC:       authorSC,
+		ContentSC:      contentSC,
+		TranslationSC:  translationSC,
+		AppreciationSC: appreciationSC,
 	}
 	if poem.Status == "" {
 		poem.Status = "draft"
 	}
 
 	if err := s.poemRepo.Create(ctx, poem); err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("创建诗歌失败: %v", err)}
 	}
 
 	resp := toAdminPoemResponse(*poem, nil)
@@ -122,7 +154,10 @@ func (s *AdminPoemService) Create(ctx context.Context, req *adminmodel.AdminPoem
 func (s *AdminPoemService) Update(ctx context.Context, id int64, req *adminmodel.AdminPoemUpdateRequest) error {
 	poem, err := s.poemRepo.GetByID(ctx, id)
 	if err != nil {
-		return err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fuego.NotFoundError{Title: "poem not found", Detail: fmt.Sprintf("诗歌不存在: id=%d", id)}
+		}
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询诗歌失败: id=%d, error=%v", id, err)}
 	}
 
 	poem.Title = req.Title
@@ -151,7 +186,7 @@ func (s *AdminPoemService) Update(ctx context.Context, id int64, req *adminmodel
 	} else {
 		poem.ContentPinyin = pinyin.ToPinyinLines(req.Content)
 	}
-		// 简繁体双向转换：填一端自动生成另一端，都填则以用户输入为准
+	// 简繁体双向转换：填一端自动生成另一端，都填则以用户输入为准
 	if req.TitleSC == "" && req.Title != "" {
 		poem.TitleSC = convert.MustTraditionalToSimplified(req.Title)
 	}
@@ -161,20 +196,59 @@ func (s *AdminPoemService) Update(ctx context.Context, id int64, req *adminmodel
 	if req.ContentSC == "" && req.Content != "" {
 		poem.ContentSC = convert.MustTraditionalToSimplified(req.Content)
 	}
+	if req.TranslationSC == "" && req.Translation != "" {
+		poem.TranslationSC = convert.MustTraditionalToSimplified(req.Translation)
+	}
+	if req.AppreciationSC == "" && req.Appreciation != "" {
+		poem.AppreciationSC = convert.MustTraditionalToSimplified(req.Appreciation)
+	}
 
 	poem.UpdatedAt = time.Now()
 
-	return s.poemRepo.Update(ctx, poem)
+	if err := s.poemRepo.Update(ctx, poem); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新诗歌失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 // Delete 删除诗歌
 func (s *AdminPoemService) Delete(ctx context.Context, id int64) error {
-	return s.poemRepo.Delete(ctx, id)
+	if err := s.poemRepo.Delete(ctx, id); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("删除诗歌失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
-// UpdateStatus 更新诗歌状态
-func (s *AdminPoemService) UpdateStatus(ctx context.Context, id int64, status string) error {
-	return s.poemRepo.UpdateStatus(ctx, id, status)
+// validStatusTransitions 定义允许的状态转换（单向：draft → published → archived）
+var validStatusTransitions = map[string]map[string]bool{
+	"draft":     {"published": true, "archived": true},
+	"published": {"archived": true},
+	"archived":  {}, // 终态，不可转换
+}
+
+// UpdateStatus 更新诗歌状态（带状态机校验）
+func (s *AdminPoemService) UpdateStatus(ctx context.Context, id int64, newStatus string) error {
+	// 获取当前诗歌状态
+	poem, err := s.poemRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fuego.NotFoundError{Title: "poem not found", Detail: fmt.Sprintf("诗歌不存在: id=%d", id)}
+		}
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询诗歌失败: %v", err)}
+	}
+
+	// 校验状态转换合法性
+	if allowed, ok := validStatusTransitions[poem.Status]; !ok || !allowed[newStatus] {
+		return fuego.BadRequestError{
+			Title:  "invalid status transition",
+			Detail: fmt.Sprintf("不允许的状态转换: %s → %s（允许: draft→published, draft→archived, published→archived）", poem.Status, newStatus),
+		}
+	}
+
+	if err := s.poemRepo.UpdateStatus(ctx, id, newStatus); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新诗歌状态失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 // BatchUpdateStatus 批量更新诗歌状态
@@ -186,6 +260,13 @@ func (s *AdminPoemService) BatchUpdateStatus(ctx context.Context, ids []int64, s
 // 返回成功处理的记录数
 func (s *AdminPoemService) EnsureSimplifiedForAllPoems(ctx context.Context) (int, error) {
 	return s.poemRepo.EnsureSimplifiedForAllPoems(ctx)
+}
+
+// EnsurePinyinForAllPoems 为存量诗歌批量生成拼音
+// 扫描 title_pinyin 为空的记录，自动生成拼音字段
+// 返回成功处理的记录数
+func (s *AdminPoemService) EnsurePinyinForAllPoems(ctx context.Context) (int, error) {
+	return s.poemRepo.EnsurePinyinForAllPoems(ctx)
 }
 
 // toAdminPoemResponse 转换 Poem 为 AdminPoemResponse
@@ -207,11 +288,13 @@ func toAdminPoemResponse(p model.Poem, categoryName *string) adminmodel.AdminPoe
 		CreatedBy:     p.CreatedBy,
 		CreatedAt:     p.CreatedAt,
 		UpdatedAt:     p.UpdatedAt,
-		TitlePinyin:   p.TitlePinyin,
-		ContentPinyin: p.ContentPinyin,
-		TitleSC:       p.TitleSC,
-		AuthorSC:      p.AuthorSC,
-		ContentSC:     p.ContentSC,
+		TitlePinyin:    p.TitlePinyin,
+		ContentPinyin:  p.ContentPinyin,
+		TitleSC:        p.TitleSC,
+		AuthorSC:       p.AuthorSC,
+		ContentSC:      p.ContentSC,
+		TranslationSC:  p.TranslationSC,
+		AppreciationSC: p.AppreciationSC,
 	}
 	if categoryName != nil {
 		resp.CategoryName = *categoryName

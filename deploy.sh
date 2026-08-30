@@ -68,16 +68,16 @@ deploy() {
         --command "docker stop ${IMAGE_NAME} 2>/dev/null; docker rm ${IMAGE_NAME} 2>/dev/null; echo 'done'" --timeout 30
 
     echo "=== 启动新容器 ==="
-    # 关键: --env-file 加载生产环境变量，--add-host 让容器能访问宿主机数据库
+    # 关键: 先启动在默认 bridge（保证 host-gateway 解析），再 connect 到 poem-net（DNS 解析 Piper）
     workbench exec --instance-id "${ECS_INSTANCE_ID}" --region "${ECS_REGION}" \
-        --command "docker run -d \
+        --command "docker network create poem-net 2>/dev/null; docker run -d \
             --name ${IMAGE_NAME} \
             --restart unless-stopped \
             --add-host=host.docker.internal:host-gateway \
             --env-file ${ENV_FILE} \
             -p ${PORT_USER_API} \
             -p ${PORT_ADMIN_API} \
-            ${IMAGE_NAME}:${IMAGE_TAG}" --timeout 30
+            ${IMAGE_NAME}:${IMAGE_TAG} && sleep 2 && docker network connect poem-net ${IMAGE_NAME}" --timeout 30
 
     echo "=== 等待服务启动（含自动迁移） ==="
     sleep 10

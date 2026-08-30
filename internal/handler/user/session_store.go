@@ -63,4 +63,3 @@ func (s *SessionStore) StartCleanup(ctx context.Context, interval time.Duration)
 		}
 	}()
 }
-

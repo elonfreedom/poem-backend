@@ -2,8 +2,12 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/go-fuego/fuego"
+	"github.com/jackc/pgx/v5"
 
 	usermodel "poem-backend/internal/model/user"
 	"poem-backend/internal/repository"
@@ -11,12 +15,14 @@ import (
 
 type SharedPlanService struct {
 	sharedPlanRepo *repository.SharedPlanRepository
+	checkinRepo    *repository.CheckinRepository
 	poemRepo       *repository.PoemRepository
 }
 
-func NewSharedPlanService(sharedPlanRepo *repository.SharedPlanRepository, poemRepo *repository.PoemRepository) *SharedPlanService {
+func NewSharedPlanService(sharedPlanRepo *repository.SharedPlanRepository, checkinRepo *repository.CheckinRepository, poemRepo *repository.PoemRepository) *SharedPlanService {
 	return &SharedPlanService{
 		sharedPlanRepo: sharedPlanRepo,
+		checkinRepo:    checkinRepo,
 		poemRepo:       poemRepo,
 	}
 }
@@ -28,7 +34,7 @@ func (s *SharedPlanService) CreateSharedPlan(ctx context.Context, userID string,
 	// 计算总天数
 	totalDays := len(req.PoemIDs) / req.DailyCount
 	if totalDays == 0 {
-		return nil, fmt.Errorf("诗文数量不足，至少需要 %d 首", req.DailyCount)
+		return nil, fuego.BadRequestError{Title: "invalid plan", Detail: fmt.Sprintf("诗文数量不足，至少需要 %d 首", req.DailyCount)}
 	}
 
 	now := time.Now()
@@ -47,7 +53,7 @@ func (s *SharedPlanService) CreateSharedPlan(ctx context.Context, userID string,
 	}
 
 	if err := s.sharedPlanRepo.Create(ctx, plan); err != nil {
-		return nil, fmt.Errorf("创建计划失败: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("创建计划失败: %v", err)}
 	}
 
 	return plan, nil
@@ -57,7 +63,10 @@ func (s *SharedPlanService) CreateSharedPlan(ctx context.Context, userID string,
 func (s *SharedPlanService) GetSharedPlan(ctx context.Context, id int64) (*usermodel.SharedPlanDetail, error) {
 	plan, err := s.sharedPlanRepo.GetByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("计划不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "plan not found", Detail: fmt.Sprintf("计划不存在: id=%d", id)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划失败: %v", err)}
 	}
 
 	// 构建列表项
@@ -99,10 +108,13 @@ func (s *SharedPlanService) GetSharedPlan(ctx context.Context, id int64) (*userm
 func (s *SharedPlanService) UpdateSharedPlan(ctx context.Context, id int64, userID string, req *usermodel.UpdateSharedPlanRequest) error {
 	plan, err := s.sharedPlanRepo.GetByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("计划不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fuego.NotFoundError{Title: "plan not found", Detail: fmt.Sprintf("计划不存在: id=%d", id)}
+		}
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划失败: %v", err)}
 	}
 	if plan.CreatorID != userID {
-		return fmt.Errorf("无权修改他人计划")
+		return fuego.ForbiddenError{Title: "access denied", Detail: "无权修改他人计划"}
 	}
 
 	// 更新字段
@@ -127,36 +139,54 @@ func (s *SharedPlanService) UpdateSharedPlan(ctx context.Context, id int64, user
 	}
 	plan.UpdatedAt = time.Now()
 
-	return s.sharedPlanRepo.Update(ctx, plan)
+	if err := s.sharedPlanRepo.Update(ctx, plan); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新计划失败: %v", err)}
+	}
+	return nil
 }
 
 // PublishPlan 发布计划
 func (s *SharedPlanService) PublishPlan(ctx context.Context, id int64, userID string) error {
 	plan, err := s.sharedPlanRepo.GetByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("计划不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fuego.NotFoundError{Title: "plan not found", Detail: fmt.Sprintf("计划不存在: id=%d", id)}
+		}
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划失败: %v", err)}
 	}
 	if plan.CreatorID != userID {
-		return fmt.Errorf("无权操作他人计划")
+		return fuego.ForbiddenError{Title: "access denied", Detail: "无权操作他人计划"}
 	}
-	return s.sharedPlanRepo.UpdatePublishStatus(ctx, id, userID, true)
+	if err := s.sharedPlanRepo.UpdatePublishStatus(ctx, id, userID, true); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("发布计划失败: %v", err)}
+	}
+	return nil
 }
 
 // UnpublishPlan 取消发布
 func (s *SharedPlanService) UnpublishPlan(ctx context.Context, id int64, userID string) error {
 	plan, err := s.sharedPlanRepo.GetByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("计划不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fuego.NotFoundError{Title: "plan not found", Detail: fmt.Sprintf("计划不存在: id=%d", id)}
+		}
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划失败: %v", err)}
 	}
 	if plan.CreatorID != userID {
-		return fmt.Errorf("无权操作他人计划")
+		return fuego.ForbiddenError{Title: "access denied", Detail: "无权操作他人计划"}
 	}
-	return s.sharedPlanRepo.UpdatePublishStatus(ctx, id, userID, false)
+	if err := s.sharedPlanRepo.UpdatePublishStatus(ctx, id, userID, false); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("取消发布失败: %v", err)}
+	}
+	return nil
 }
 
 // DeleteSharedPlan 删除共享计划
 func (s *SharedPlanService) DeleteSharedPlan(ctx context.Context, id int64, userID string) error {
-	return s.sharedPlanRepo.Delete(ctx, id, userID)
+	if err := s.sharedPlanRepo.Delete(ctx, id, userID); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("删除计划失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 // ListSharedPlans 浏览共享库
@@ -169,14 +199,18 @@ func (s *SharedPlanService) ListSharedPlans(ctx context.Context, page, pageSize 
 	}
 	list, total, err := s.sharedPlanRepo.List(ctx, page, pageSize, keyword, tags, sortBy)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划列表失败: %v", err)}
 	}
 	return list, total, nil
 }
 
 // GetMySharedPlans 获取我创建的计划
 func (s *SharedPlanService) GetMySharedPlans(ctx context.Context, userID string) ([]usermodel.SharedPlanListItem, error) {
-	return s.sharedPlanRepo.GetMyPlans(ctx, userID)
+	list, err := s.sharedPlanRepo.GetMyPlans(ctx, userID)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询我的计划失败: %v", err)}
+	}
+	return list, nil
 }
 
 // ==================== 订阅管理 ====================
@@ -186,16 +220,19 @@ func (s *SharedPlanService) Subscribe(ctx context.Context, userID string, shared
 	// 检查计划是否存在且已发布
 	plan, err := s.sharedPlanRepo.GetByID(ctx, sharedPlanID)
 	if err != nil {
-		return nil, fmt.Errorf("计划不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "plan not found", Detail: fmt.Sprintf("计划不存在: id=%d", sharedPlanID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划失败: %v", err)}
 	}
 	if !plan.IsPublished {
-		return nil, fmt.Errorf("计划已下架")
+		return nil, fuego.BadRequestError{Title: "plan unavailable", Detail: "计划已下架"}
 	}
 
 	// 检查是否已订阅
 	existing, _ := s.sharedPlanRepo.GetSubscription(ctx, userID, sharedPlanID)
 	if existing != nil {
-		return nil, fmt.Errorf("已订阅该计划")
+		return nil, fuego.BadRequestError{Title: "already subscribed", Detail: "已订阅该计划"}
 	}
 
 	// 解析开始日期
@@ -217,7 +254,7 @@ func (s *SharedPlanService) Subscribe(ctx context.Context, userID string, shared
 	}
 
 	if err := s.sharedPlanRepo.CreateSubscription(ctx, sub); err != nil {
-		return nil, fmt.Errorf("订阅失败: %w", err)
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("订阅失败: %v", err)}
 	}
 
 	// 订阅数+1
@@ -229,7 +266,7 @@ func (s *SharedPlanService) Subscribe(ctx context.Context, userID string, shared
 // Unsubscribe 取消订阅
 func (s *SharedPlanService) Unsubscribe(ctx context.Context, userID string, sharedPlanID int64) error {
 	if err := s.sharedPlanRepo.DeleteSubscription(ctx, userID, sharedPlanID); err != nil {
-		return fmt.Errorf("取消订阅失败: %w", err)
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("取消订阅失败: %v", err)}
 	}
 	// 订阅数-1
 	s.sharedPlanRepo.DecrementSubscribeCount(ctx, sharedPlanID)
@@ -240,14 +277,21 @@ func (s *SharedPlanService) Unsubscribe(ctx context.Context, userID string, shar
 func (s *SharedPlanService) SetStartDate(ctx context.Context, subID int64, userID string, startDateStr string) error {
 	startDate, err := time.Parse("2006-01-02", startDateStr)
 	if err != nil {
-		return fmt.Errorf("无效的日期格式")
+		return fuego.BadRequestError{Title: "invalid date", Detail: "无效的日期格式，应为 YYYY-MM-DD"}
 	}
-	return s.sharedPlanRepo.UpdateStartDate(ctx, subID, userID, startDate.Format("2006-01-02"))
+	if err := s.sharedPlanRepo.UpdateStartDate(ctx, subID, userID, startDate.Format("2006-01-02")); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("设置开始日期失败: %v", err)}
+	}
+	return nil
 }
 
 // GetMySubscriptions 获取我的订阅列表
 func (s *SharedPlanService) GetMySubscriptions(ctx context.Context, userID string) ([]usermodel.SubscribeListResponse, error) {
-	return s.sharedPlanRepo.GetMySubscriptions(ctx, userID)
+	list, err := s.sharedPlanRepo.GetMySubscriptions(ctx, userID)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询订阅列表失败: %v", err)}
+	}
+	return list, nil
 }
 
 // ==================== 每日诗文 & 打卡 ====================
@@ -257,16 +301,22 @@ func (s *SharedPlanService) GetTodayPoem(ctx context.Context, subID int64, userI
 	// 获取订阅信息
 	sub, err := s.sharedPlanRepo.GetSubscriptionByID(ctx, subID)
 	if err != nil {
-		return nil, fmt.Errorf("订阅不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "subscription not found", Detail: fmt.Sprintf("订阅不存在: id=%d", subID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询订阅失败: %v", err)}
 	}
 	if sub.UserID != userID {
-		return nil, fmt.Errorf("无权访问")
+		return nil, fuego.ForbiddenError{Title: "access denied", Detail: "无权访问"}
 	}
 
 	// 获取计划信息
 	plan, err := s.sharedPlanRepo.GetByID(ctx, sub.SharedPlanID)
 	if err != nil {
-		return nil, fmt.Errorf("计划不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "plan not found", Detail: "计划不存在"}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划失败: %v", err)}
 	}
 
 	// 计算今天是第几天
@@ -322,7 +372,7 @@ func (s *SharedPlanService) GetTodayPoem(ctx context.Context, subID int64, userI
 	// 检查今日是否已打卡
 	checkedIn := false
 	var checkedAt *string
-	checkin, _ := s.sharedPlanRepo.GetCheckinByDay(ctx, subID, dayNumber)
+	checkin, _ := s.checkinRepo.GetCheckinBySubDay(ctx, subID, dayNumber)
 	if checkin != nil {
 		checkedIn = true
 		t := checkin.CreatedAt.Format("2006-01-02T15:04:05")
@@ -330,7 +380,7 @@ func (s *SharedPlanService) GetTodayPoem(ctx context.Context, subID int64, userI
 	}
 
 	// 计算完成率
-	completedDays, _ := s.sharedPlanRepo.CountCheckins(ctx, subID)
+	completedDays, _ := s.checkinRepo.CountCheckinsBySubscription(ctx, subID)
 	progressRate := float64(completedDays) / float64(plan.TotalDays) * 100
 
 	return &usermodel.TodayPoemResponse{
@@ -346,8 +396,8 @@ func (s *SharedPlanService) GetTodayPoem(ctx context.Context, subID int64, userI
 
 // getLastCheckinInfo 获取诗文的上次打卡信息
 func (s *SharedPlanService) getLastCheckinInfo(ctx context.Context, userID string, poemID int64) (*usermodel.CheckinInfo, error) {
-	// 先从 plan_checkins 查询（共享计划打卡）
-	date, planTitle, daysAgo, err := s.sharedPlanRepo.GetLastCheckinByPoemFromPlanCheckins(ctx, userID, poemID)
+	// 先从 checkins 表查询（含订阅打卡）
+	date, planTitle, daysAgo, err := s.checkinRepo.GetLastCheckinByPoem(ctx, userID, poemID)
 	if err == nil {
 		return &usermodel.CheckinInfo{
 			Date:      date,
@@ -356,7 +406,7 @@ func (s *SharedPlanService) getLastCheckinInfo(ctx context.Context, userID strin
 		}, nil
 	}
 
-	// 再从 reading_progress 查询（普通阅读打卡）
+	// 再从 reading_progress 查询（自建计划阅读打卡）
 	date, planTitle, daysAgo, err = s.sharedPlanRepo.GetLastCheckinByPoem(ctx, userID, poemID)
 	if err == nil {
 		return &usermodel.CheckinInfo{
@@ -374,23 +424,29 @@ func (s *SharedPlanService) SkipDay(ctx context.Context, subID int64, userID str
 	// 获取订阅信息
 	sub, err := s.sharedPlanRepo.GetSubscriptionByID(ctx, subID)
 	if err != nil {
-		return nil, fmt.Errorf("订阅不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "subscription not found", Detail: fmt.Sprintf("订阅不存在: id=%d", subID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询订阅失败: %v", err)}
 	}
 	if sub.UserID != userID {
-		return nil, fmt.Errorf("无权访问")
+		return nil, fuego.ForbiddenError{Title: "access denied", Detail: "无权访问"}
 	}
 
 	// 获取计划信息
 	plan, err := s.sharedPlanRepo.GetByID(ctx, sub.SharedPlanID)
 	if err != nil {
-		return nil, fmt.Errorf("计划不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "plan not found", Detail: "计划不存在"}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划失败: %v", err)}
 	}
 
 	// 从 currentDay+1 开始找第一个未打卡的天
 	nextDay := currentDay + 1
 	for nextDay <= plan.TotalDays {
 		// 检查该天是否已打卡
-		checkin, _ := s.sharedPlanRepo.GetCheckinByDay(ctx, subID, nextDay)
+		checkin, _ := s.checkinRepo.GetCheckinBySubDay(ctx, subID, nextDay)
 		if checkin == nil {
 			// 未打卡，获取该天的第一首诗文
 			startIdx := (nextDay - 1) * plan.DailyCount
@@ -421,7 +477,7 @@ func (s *SharedPlanService) SkipDay(ctx context.Context, subID int64, userID str
 	}
 
 	// 所有天都已完成打卡
-	return nil, fmt.Errorf("所有天都已完成打卡")
+	return nil, fuego.BadRequestError{Title: "all completed", Detail: "所有天都已完成打卡"}
 }
 
 // Checkin 打卡
@@ -429,16 +485,22 @@ func (s *SharedPlanService) Checkin(ctx context.Context, subID int64, userID str
 	// 获取订阅信息
 	sub, err := s.sharedPlanRepo.GetSubscriptionByID(ctx, subID)
 	if err != nil {
-		return nil, fmt.Errorf("订阅不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "subscription not found", Detail: fmt.Sprintf("订阅不存在: id=%d", subID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询订阅失败: %v", err)}
 	}
 	if sub.UserID != userID {
-		return nil, fmt.Errorf("无权访问")
+		return nil, fuego.ForbiddenError{Title: "access denied", Detail: "无权访问"}
 	}
 
 	// 获取计划信息
 	plan, err := s.sharedPlanRepo.GetByID(ctx, sub.SharedPlanID)
 	if err != nil {
-		return nil, fmt.Errorf("计划不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "plan not found", Detail: "计划不存在"}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划失败: %v", err)}
 	}
 
 	// 计算今天是第几天
@@ -448,22 +510,13 @@ func (s *SharedPlanService) Checkin(ctx context.Context, subID int64, userID str
 		dayNumber = 1
 	}
 
-	// 创建打卡记录
-	checkin := &usermodel.PlanCheckin{
-		SubscriptionID: subID,
-		UserID:         userID,
-		DayNumber:      dayNumber,
-		CheckinDate:    today,
-		PoemIDs:        poemIDs,
-		CreatedAt:      today,
-	}
-
-	if err := s.sharedPlanRepo.CreateCheckin(ctx, checkin); err != nil {
-		return nil, fmt.Errorf("打卡失败: %w", err)
+	// 创建打卡记录（写入统一的 checkins 表）
+	if err := s.checkinRepo.CreateSubscriptionCheckin(ctx, userID, subID, dayNumber, today, poemIDs, today); err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("打卡失败: %v", err)}
 	}
 
 	// 计算完成率
-	completedDays, _ := s.sharedPlanRepo.CountCheckins(ctx, subID)
+	completedDays, _ := s.checkinRepo.CountCheckinsBySubscription(ctx, subID)
 	progressRate := float64(completedDays) / float64(plan.TotalDays) * 100
 
 	return &usermodel.CheckinResponse{
@@ -480,31 +533,36 @@ func (s *SharedPlanService) GetSubscriptionProgress(ctx context.Context, subID i
 	// 获取订阅信息
 	sub, err := s.sharedPlanRepo.GetSubscriptionByID(ctx, subID)
 	if err != nil {
-		return nil, fmt.Errorf("订阅不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "subscription not found", Detail: fmt.Sprintf("订阅不存在: id=%d", subID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询订阅失败: %v", err)}
 	}
 	if sub.UserID != userID {
-		return nil, fmt.Errorf("无权访问")
+		return nil, fuego.ForbiddenError{Title: "access denied", Detail: "无权访问"}
 	}
 
 	// 获取计划信息
 	plan, err := s.sharedPlanRepo.GetByID(ctx, sub.SharedPlanID)
 	if err != nil {
-		return nil, fmt.Errorf("计划不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "plan not found", Detail: "计划不存在"}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询计划失败: %v", err)}
 	}
 
 	// 获取打卡记录
-	checkins, err := s.sharedPlanRepo.GetCheckinsBySubscription(ctx, subID)
+	checkins, err := s.checkinRepo.GetCheckinsBySubscription(ctx, subID)
 	if err != nil {
-		return nil, fmt.Errorf("获取打卡记录失败")
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("获取打卡记录失败: %v", err)}
 	}
 
 	// 构建打卡映射：day_number -> 第一首诗文标题
 	checkinMap := make(map[int]string)
 	for _, c := range checkins {
-		if len(c.PoemIDs) > 0 {
-			// 获取第一首诗文的标题
-			if p, err := s.poemRepo.GetByID(ctx, c.PoemIDs[0]); err == nil {
-				checkinMap[c.DayNumber] = p.Title
+		if pid := c.PoemIDOrFirst(); pid != nil {
+			if p, err := s.poemRepo.GetByID(ctx, *pid); err == nil {
+				checkinMap[*c.DayNumber] = p.Title
 			}
 		}
 	}
@@ -548,30 +606,37 @@ func (s *SharedPlanService) GetCheckins(ctx context.Context, subID int64, userID
 	// 获取订阅信息
 	sub, err := s.sharedPlanRepo.GetSubscriptionByID(ctx, subID)
 	if err != nil {
-		return nil, fmt.Errorf("订阅不存在")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "subscription not found", Detail: fmt.Sprintf("订阅不存在: id=%d", subID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询订阅失败: %v", err)}
 	}
 	if sub.UserID != userID {
-		return nil, fmt.Errorf("无权访问")
+		return nil, fuego.ForbiddenError{Title: "access denied", Detail: "无权访问"}
 	}
 
 	// 获取打卡记录
-	checkins, err := s.sharedPlanRepo.GetCheckinsBySubscription(ctx, subID)
+	checkins, err := s.checkinRepo.GetCheckinsBySubscription(ctx, subID)
 	if err != nil {
-		return nil, fmt.Errorf("获取打卡记录失败")
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("获取打卡记录失败: %v", err)}
 	}
 
 	// 构建响应
 	items := make([]usermodel.CheckinRecord, 0, len(checkins))
 	for _, c := range checkins {
 		poemTitle := ""
-		if len(c.PoemIDs) > 0 {
-			if p, err := s.poemRepo.GetByID(ctx, c.PoemIDs[0]); err == nil {
+		if pid := c.PoemIDOrFirst(); pid != nil {
+			if p, err := s.poemRepo.GetByID(ctx, *pid); err == nil {
 				poemTitle = p.Title
 			}
 		}
+		dayNumber := 0
+		if c.DayNumber != nil {
+			dayNumber = *c.DayNumber
+		}
 		items = append(items, usermodel.CheckinRecord{
-			Date:      c.CheckinDate.Format("2006-01-02"),
-			DayNumber: c.DayNumber,
+			Date:      c.Date.Format("2006-01-02"),
+			DayNumber: dayNumber,
 			PoemTitle: poemTitle,
 		})
 	}
@@ -584,10 +649,16 @@ func (s *SharedPlanService) GetCheckins(ctx context.Context, subID int64, userID
 
 // PauseSubscription 暂停订阅
 func (s *SharedPlanService) PauseSubscription(ctx context.Context, subID int64, userID string) error {
-	return s.sharedPlanRepo.UpdateSubscriptionStatus(ctx, subID, userID, "paused")
+	if err := s.sharedPlanRepo.UpdateSubscriptionStatus(ctx, subID, userID, "paused"); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("暂停订阅失败: %v", err)}
+	}
+	return nil
 }
 
 // ResumeSubscription 恢复订阅
 func (s *SharedPlanService) ResumeSubscription(ctx context.Context, subID int64, userID string) error {
-	return s.sharedPlanRepo.UpdateSubscriptionStatus(ctx, subID, userID, "active")
+	if err := s.sharedPlanRepo.UpdateSubscriptionStatus(ctx, subID, userID, "active"); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("恢复订阅失败: %v", err)}
+	}
+	return nil
 }

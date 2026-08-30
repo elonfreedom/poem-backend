@@ -32,7 +32,7 @@ func (h *AuthorHandler) List(c fuego.ContextNoBody) (*response.APIResponse[respo
 
 	result, err := h.authorService.List(c.Context(), page, pageSize, keyword)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "获取作者列表失败", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.PageOK(result.Items, result.Total), nil
 }
@@ -46,7 +46,7 @@ func (h *AuthorHandler) GetByID(c fuego.ContextNoBody) (*response.APIResponse[ad
 
 	result, err := h.authorService.GetByID(c.Context(), id)
 	if err != nil {
-		return nil, fuego.NotFoundError{Title: "作者不存在", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(*result), nil
 }
@@ -60,13 +60,13 @@ func (h *AuthorHandler) Create(c fuego.ContextWithBody[adminmodel.AdminAuthorCre
 
 	result, err := h.authorService.Create(c.Context(), &body)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "创建作者失败", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(*result), nil
 }
 
 // Update 更新作者
-func (h *AuthorHandler) Update(c fuego.ContextWithBody[adminmodel.AdminAuthorUpdateRequest]) (*response.APIResponse[any], error) {
+func (h *AuthorHandler) Update(c fuego.ContextWithBody[adminmodel.AdminAuthorUpdateRequest]) (*response.APIResponse[response.SimpleResponse], error) {
 	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "作者ID必须是数字"}
@@ -78,22 +78,22 @@ func (h *AuthorHandler) Update(c fuego.ContextWithBody[adminmodel.AdminAuthorUpd
 	}
 
 	if err := h.authorService.Update(c.Context(), id, &body); err != nil {
-		return nil, fuego.InternalServerError{Title: "更新作者失败", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
-	return response.OK[any](nil), nil
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }
 
 // Delete 删除作者
-func (h *AuthorHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+func (h *AuthorHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[response.SimpleResponse], error) {
 	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "作者ID必须是数字"}
 	}
 
 	if err := h.authorService.Delete(c.Context(), id); err != nil {
-		return nil, fuego.InternalServerError{Title: "删除作者失败", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
-	return response.OK[any](nil), nil
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }
 
 // Options 作者下拉搜索（用于诗歌表单）
@@ -101,7 +101,7 @@ func (h *AuthorHandler) Options(c fuego.ContextNoBody) (*response.APIResponse[[]
 	keyword := c.QueryParam("keyword")
 	result, err := h.authorService.SearchOptions(c.Context(), keyword)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "搜索作者失败", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(result), nil
 }
@@ -115,7 +115,7 @@ func (h *AuthorHandler) BatchMatch(c fuego.ContextWithBody[adminmodel.AdminAutho
 
 	result, err := h.authorService.BatchMatchPoems(c.Context(), body.PoetryIDs)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "批量匹配失败", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(*result), nil
 }

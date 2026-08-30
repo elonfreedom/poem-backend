@@ -33,7 +33,7 @@ func (h *UserHandler) List(c fuego.ContextNoBody) (*response.APIResponse[respons
 
 	items, total, err := h.userService.ListUsers(c.Context(), page, pageSize, keyword, status)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "list failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.PageOK(items, total), nil
@@ -52,14 +52,14 @@ func (h *UserHandler) GetByID(c fuego.ContextNoBody) (*response.APIResponse[admi
 
 	detail, err := h.userService.GetUserDetail(c.Context(), id)
 	if err != nil {
-		return nil, fuego.NotFoundError{Title: "not found", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.OK(*detail), nil
 }
 
 // UpdateStatus 更新用户状态（禁用/启用）
-func (h *UserHandler) UpdateStatus(c fuego.ContextWithBody[adminmodel.AdminUserUpdateStatusRequest]) (*response.APIResponse[any], error) {
+func (h *UserHandler) UpdateStatus(c fuego.ContextWithBody[adminmodel.AdminUserUpdateStatusRequest]) (*response.APIResponse[response.SimpleResponse], error) {
 	id := c.QueryParam("id")
 	if id == "" {
 		id = c.PathParam("id")
@@ -74,8 +74,8 @@ func (h *UserHandler) UpdateStatus(c fuego.ContextWithBody[adminmodel.AdminUserU
 	}
 
 	if err := h.userService.UpdateUserStatus(c.Context(), id, body.Status); err != nil {
-		return nil, fuego.InternalServerError{Title: "update failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.OK[any](nil), nil
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }

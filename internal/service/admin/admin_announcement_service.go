@@ -2,7 +2,12 @@ package admin
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
+
+	"github.com/go-fuego/fuego"
+	"github.com/jackc/pgx/v5"
 
 	"poem-backend/internal/model"
 	adminmodel "poem-backend/internal/model/admin"
@@ -21,7 +26,7 @@ func NewAdminAnnouncementService(announcementRepo *repository.AnnouncementReposi
 func (s *AdminAnnouncementService) List(ctx context.Context) ([]adminmodel.AdminAnnouncementResponse, error) {
 	announcements, err := s.announcementRepo.List(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询公告列表失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminAnnouncementResponse, 0, len(announcements))
@@ -35,7 +40,10 @@ func (s *AdminAnnouncementService) List(ctx context.Context) ([]adminmodel.Admin
 func (s *AdminAnnouncementService) GetByID(ctx context.Context, id int64) (*adminmodel.AdminAnnouncementResponse, error) {
 	announcement, err := s.announcementRepo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "announcement not found", Detail: fmt.Sprintf("公告不存在: id=%d", id)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询公告失败: id=%d, error=%v", id, err)}
 	}
 	resp := toAdminAnnouncementResponse(*announcement)
 	return &resp, nil
@@ -56,7 +64,7 @@ func (s *AdminAnnouncementService) Create(ctx context.Context, req *adminmodel.A
 	}
 
 	if err := s.announcementRepo.Create(ctx, announcement); err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("创建公告失败: %v", err)}
 	}
 
 	resp := toAdminAnnouncementResponse(*announcement)
@@ -67,7 +75,10 @@ func (s *AdminAnnouncementService) Create(ctx context.Context, req *adminmodel.A
 func (s *AdminAnnouncementService) Update(ctx context.Context, id int64, req *adminmodel.AdminAnnouncementUpdateRequest) error {
 	announcement, err := s.announcementRepo.GetByID(ctx, id)
 	if err != nil {
-		return err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fuego.NotFoundError{Title: "announcement not found", Detail: fmt.Sprintf("公告不存在: id=%d", id)}
+		}
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询公告失败: id=%d, error=%v", id, err)}
 	}
 
 	announcement.Title = req.Title
@@ -75,12 +86,18 @@ func (s *AdminAnnouncementService) Update(ctx context.Context, id int64, req *ad
 	announcement.Status = req.Status
 	announcement.UpdatedAt = time.Now()
 
-	return s.announcementRepo.Update(ctx, announcement)
+	if err := s.announcementRepo.Update(ctx, announcement); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新公告失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 // Delete 删除公告
 func (s *AdminAnnouncementService) Delete(ctx context.Context, id int64) error {
-	return s.announcementRepo.Delete(ctx, id)
+	if err := s.announcementRepo.Delete(ctx, id); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("删除公告失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 func toAdminAnnouncementResponse(a model.Announcement) adminmodel.AdminAnnouncementResponse {

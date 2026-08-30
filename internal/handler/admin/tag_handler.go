@@ -22,7 +22,7 @@ func NewTagHandler(tagService *admin.AdminTagService) *TagHandler {
 func (h *TagHandler) List(c fuego.ContextNoBody) (*response.APIResponse[[]adminmodel.AdminTagResponse], error) {
 	result, err := h.tagService.List(c.Context())
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "list failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(result), nil
 }
@@ -36,20 +36,20 @@ func (h *TagHandler) Create(c fuego.ContextWithBody[adminmodel.AdminTagCreateReq
 
 	result, err := h.tagService.Create(c.Context(), &body)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "create failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(*result), nil
 }
 
 // Delete 删除标签
-func (h *TagHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+func (h *TagHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[response.SimpleResponse], error) {
 	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "标签ID必须是数字"}
 	}
 
 	if err := h.tagService.Delete(c.Context(), id); err != nil {
-		return nil, fuego.InternalServerError{Title: "delete failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
-	return response.OK[any](nil), nil
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }

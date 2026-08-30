@@ -1,11 +1,8 @@
 package user
 
 import (
-	"strconv"
-
 	"github.com/go-fuego/fuego"
 
-	"poem-backend/internal/middleware"
 	usermodel "poem-backend/internal/model/user"
 	userservice "poem-backend/internal/service/user"
 	"poem-backend/pkg/response"
@@ -20,10 +17,10 @@ func NewReadingPlanHandler(readingPlanService *userservice.ReadingPlanService) *
 }
 
 // CreatePlan 创建阅读计划
-func (h *ReadingPlanHandler) CreatePlan(c fuego.ContextWithBody[usermodel.CreatePlanRequest]) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *ReadingPlanHandler) CreatePlan(c fuego.ContextWithBody[usermodel.CreatePlanRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
 	body, err := c.Body()
@@ -33,90 +30,90 @@ func (h *ReadingPlanHandler) CreatePlan(c fuego.ContextWithBody[usermodel.Create
 
 	result, err := h.readingPlanService.CreatePlan(c.Context(), userID, &body)
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "bad request", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // GetCurrentPlan 获取当前计划
-func (h *ReadingPlanHandler) GetCurrentPlan(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *ReadingPlanHandler) GetCurrentPlan(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
 	result, err := h.readingPlanService.GetCurrentPlan(c.Context(), userID)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // PausePlan 暂停计划
-func (h *ReadingPlanHandler) PausePlan(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *ReadingPlanHandler) PausePlan(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	planID, err := strconv.Atoi(c.PathParam("id"))
+	planID, err := ParsePathInt(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划 ID"}
+		return nil, err
 	}
 
 	if err := h.readingPlanService.PausePlan(c.Context(), userID, planID); err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "paused"}), nil
+	return response.Success(StatusPaused), nil
 }
 
 // ResumePlan 恢复计划
-func (h *ReadingPlanHandler) ResumePlan(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *ReadingPlanHandler) ResumePlan(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	planID, err := strconv.Atoi(c.PathParam("id"))
+	planID, err := ParsePathInt(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划 ID"}
+		return nil, err
 	}
 
 	if err := h.readingPlanService.ResumePlan(c.Context(), userID, planID); err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(map[string]string{"status": "resumed"}), nil
+	return response.Success(StatusResumed), nil
 }
 
 // GetPlanProgress 获取计划进度
-func (h *ReadingPlanHandler) GetPlanProgress(c fuego.ContextNoBody) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *ReadingPlanHandler) GetPlanProgress(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
-	planID, err := strconv.Atoi(c.PathParam("id"))
+	planID, err := ParsePathInt(c, "id")
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "无效的计划 ID"}
+		return nil, err
 	}
 
 	result, err := h.readingPlanService.GetPlanProgress(c.Context(), userID, planID)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil
 }
 
 // LogReading 记录阅读
-func (h *ReadingPlanHandler) LogReading(c fuego.ContextWithBody[usermodel.LogReadingRequest]) (map[string]any, error) {
-	userID := middleware.GetUserIDFromContext(c.Context())
-	if userID == "" {
-		return nil, fuego.UnauthorizedError{Title: "unauthorized", Detail: "未登录"}
+func (h *ReadingPlanHandler) LogReading(c fuego.ContextWithBody[usermodel.LogReadingRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
 	}
 
 	body, err := c.Body()
@@ -126,7 +123,7 @@ func (h *ReadingPlanHandler) LogReading(c fuego.ContextWithBody[usermodel.LogRea
 
 	result, err := h.readingPlanService.LogReading(c.Context(), userID, body.PoemIDs)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "internal error", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.Success(result), nil

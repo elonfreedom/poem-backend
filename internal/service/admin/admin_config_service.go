@@ -2,7 +2,12 @@ package admin
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
+
+	"github.com/go-fuego/fuego"
+	"github.com/jackc/pgx/v5"
 
 	"poem-backend/internal/model"
 	adminmodel "poem-backend/internal/model/admin"
@@ -21,7 +26,7 @@ func NewAdminConfigService(configRepo *repository.ConfigRepository) *AdminConfig
 func (s *AdminConfigService) List(ctx context.Context) ([]adminmodel.AdminConfigResponse, error) {
 	configs, err := s.configRepo.List(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询配置列表失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminConfigResponse, 0, len(configs))
@@ -35,7 +40,10 @@ func (s *AdminConfigService) List(ctx context.Context) ([]adminmodel.AdminConfig
 func (s *AdminConfigService) GetByKey(ctx context.Context, key string) (*adminmodel.AdminConfigResponse, error) {
 	config, err := s.configRepo.GetByKey(ctx, key)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "config not found", Detail: fmt.Sprintf("配置不存在: key=%s", key)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询配置失败: key=%s, error=%v", key, err)}
 	}
 	resp := toAdminConfigResponse(*config)
 	return &resp, nil
@@ -52,13 +60,19 @@ func (s *AdminConfigService) Update(ctx context.Context, key string, req *adminm
 			Remark:    req.Remark,
 			UpdatedAt: time.Now(),
 		}
-		return s.configRepo.Create(ctx, config)
+		if err := s.configRepo.Create(ctx, config); err != nil {
+			return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("创建配置失败: key=%s, error=%v", key, err)}
+		}
+		return nil
 	}
 
 	config.Value = req.Value
 	config.Remark = req.Remark
 	config.UpdatedAt = time.Now()
-	return s.configRepo.Update(ctx, config)
+	if err := s.configRepo.Update(ctx, config); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新配置失败: key=%s, error=%v", key, err)}
+	}
+	return nil
 }
 
 func toAdminConfigResponse(c model.SystemConfig) adminmodel.AdminConfigResponse {

@@ -35,7 +35,7 @@ FROM alpine:3.20
 
 # Alpine 国内镜像加速
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk add --no-cache ca-certificates tzdata ffmpeg \
     && addgroup -S appgroup \
     && adduser -S appuser -G appgroup
 

@@ -10,15 +10,15 @@ import (
 
 // Connection 跨设备连接数据
 type Connection struct {
-	Token         string
-	UserID        string
-	DeviceName    string
-	Status        string
-	Session       any // webauthn.SessionData 序列化前
-	Options       any // CredentialCreation 序列化前
-	CreatedAt     time.Time
-	ExpiresAt     time.Time
-	LastActiveAt  time.Time // 设备 B 最后活跃时间（心跳超时检测）
+	Token        string
+	UserID       string
+	DeviceName   string
+	Status       string
+	Session      any // webauthn.SessionData 序列化前
+	Options      any // CredentialCreation 序列化前
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	LastActiveAt time.Time // 设备 B 最后活跃时间（心跳超时检测）
 }
 
 // ConnectionRepository 跨设备连接持久化

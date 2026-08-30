@@ -40,6 +40,7 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	adminConfigService := adminservice.NewAdminConfigService(configRepo)
 	adminUserService := adminservice.NewAdminUserService(userRepo, checkinRepo, favoriteRepo, readingPlanRepo, passkeyRepo)
 	adminAuthorService := adminservice.NewAdminAuthorService(authorRepo)
+	adminCheckinService := adminservice.NewAdminCheckinService(checkinRepo)
 
 	// 初始化 Handler
 	authHandler := admin.NewAuthHandler(adminAuthService)
@@ -52,6 +53,7 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	configHandler := admin.NewConfigHandler(adminConfigService)
 	userHandler := admin.NewUserHandler(adminUserService)
 	authorHandler := admin.NewAuthorHandler(adminAuthorService)
+	checkinHandler := admin.NewCheckinHandler(adminCheckinService)
 	toolsHandler := tools.NewToolsHandler(adminPoemService, adminAuthorService)
 
 	// ========== 后台管理路由组（端口 8081，全部以 /api/admin 开头）==========
@@ -231,6 +233,18 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionTags("数据统计"),
 	)
 
+	// [打卡管理]
+	fuego.Get(adminMgmt, "/checkins", checkinHandler.List,
+		fuego.OptionSummary("获取打卡记录列表"),
+		fuego.OptionOverrideDescription("分页获取所有用户打卡记录，支持昵称搜索和日期范围筛选"),
+		fuego.OptionTags("打卡管理"),
+	)
+	fuego.Get(adminMgmt, "/stats/checkin", checkinHandler.Stats,
+		fuego.OptionSummary("获取打卡数据统计"),
+		fuego.OptionOverrideDescription("获取打卡统计数据，包括日均打卡率、7日留存率、热门诗歌等"),
+		fuego.OptionTags("打卡管理"),
+	)
+
 	// [Banner 管理]
 	fuego.Get(adminMgmt, "/banners", bannerHandler.List,
 		fuego.OptionSummary("获取 Banner 列表"),
@@ -313,6 +327,11 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	fuego.Post(adminMgmt, "/tools/convert-simplified", toolsHandler.BatchConvertSimplified,
 		fuego.OptionSummary("批量生成简体"),
 		fuego.OptionOverrideDescription("一键为存量诗歌自动生成简体（繁体→简体），扫描 title_sc/author_sc/content_sc 为空的记录进行处理"),
+		fuego.OptionTags("工具模块"),
+	)
+	fuego.Post(adminMgmt, "/tools/generate-pinyin", toolsHandler.BatchGeneratePinyin,
+		fuego.OptionSummary("批量生成拼音"),
+		fuego.OptionOverrideDescription("一键为存量诗歌自动生成拼音（带声调），扫描 title_pinyin 为空的记录进行处理"),
 		fuego.OptionTags("工具模块"),
 	)
 	fuego.Post(adminMgmt, "/tools/generate-authors", toolsHandler.GenerateAuthorsFromPoems,

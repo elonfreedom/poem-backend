@@ -10,13 +10,13 @@ import (
 type AdminLoginRequest struct {
 	Username      string `json:"username" validate:"required" description:"管理员邮箱/用户名"`
 	Password      string `json:"password" validate:"required,min=6,max=64" description:"密码（6-64个字符）"`
-	SelectAccount string `json:"selectAccount,omitempty" description:"vben-admin 选择账户字段（忽略）"`
+	SelectAccount string `json:"select_account,omitempty" description:"vben-admin 选择账户字段（忽略）"`
 	Captcha       bool   `json:"captcha,omitempty" description:"vben-admin 验证码字段（忽略）"`
 }
 
 // AdminLoginResponse 后台登录响应（适配 vben-admin）
 type AdminLoginResponse struct {
-	AccessToken string            `json:"accessToken" description:"JWT 认证令牌"`
+	AccessToken string            `json:"access_token" description:"JWT 认证令牌"`
 	User        AdminUserResponse `json:"user" description:"用户信息"`
 }
 
@@ -31,17 +31,17 @@ type AdminUserResponse struct {
 
 // AdminUserInfoResponse 用户信息响应（适配 vben-admin /user/info）
 type AdminUserInfoResponse struct {
-	UserId   string          `json:"userId" description:"用户ID"`
+	UserId   string          `json:"user_id" description:"用户ID"`
 	Username string          `json:"username" description:"用户名"`
-	RealName string          `json:"realName" description:"真实姓名"`
+	RealName string          `json:"real_name" description:"真实姓名"`
 	Avatar   string          `json:"avatar" description:"头像"`
 	Desc     string          `json:"desc" description:"描述/角色"`
-	HomePath string          `json:"homePath" description:"首页路径"`
+	HomePath string          `json:"home_path" description:"首页路径"`
 	Roles    []AdminRoleInfo `json:"roles" description:"角色列表"`
 }
 
 type AdminRoleInfo struct {
-	RoleName string `json:"roleName" description:"角色名称"`
+	RoleName string `json:"role_name" description:"角色名称"`
 	Value    string `json:"value" description:"角色值"`
 }
 
@@ -49,76 +49,82 @@ type AdminRoleInfo struct {
 
 // AdminPoemResponse 诗歌管理响应
 type AdminPoemResponse struct {
-	ID            int64     `json:"id" description:"诗歌ID"`
-	Title         string    `json:"title" description:"诗歌标题"`
-	Author        string    `json:"author" description:"作者"`
-	Dynasty       string    `json:"dynasty,omitempty" description:"朝代"`
-	Content       string    `json:"content" description:"原文内容"`
-	Translation   string    `json:"translation,omitempty" description:"现代译文"`
-	Appreciation  string    `json:"appreciation,omitempty" description:"赏析"`
-	Source        string    `json:"source,omitempty" description:"来源（如《唐诗三百首》）"`
-	CategoryID    *int64    `json:"category_id,omitempty" description:"分类ID"`
-	AuthorID      *int64    `json:"author_id,omitempty" description:"作者ID"`
-	CategoryName  string    `json:"category_name,omitempty" description:"分类名称"`
-	Tags          []string  `json:"tags,omitempty" description:"标签列表"`
-	CoverURL      string    `json:"cover_url,omitempty" description:"封面图片URL"`
-	Status        string    `json:"status" description:"状态: draft, published, archived"`
-	CreatedBy     *string   `json:"created_by,omitempty" description:"创建者ID"`
-	CreatedAt     time.Time `json:"created_at" description:"创建时间"`
-	UpdatedAt     time.Time `json:"updated_at" description:"更新时间"`
+	ID           int64     `json:"id" description:"诗歌ID"`
+	Title        string    `json:"title" description:"诗歌标题"`
+	Author       string    `json:"author" description:"作者"`
+	Dynasty      string    `json:"dynasty,omitempty" description:"朝代"`
+	Content      string    `json:"content" description:"原文内容"`
+	Translation  string    `json:"translation,omitempty" description:"现代译文"`
+	Appreciation string    `json:"appreciation,omitempty" description:"赏析"`
+	Source       string    `json:"source,omitempty" description:"来源（如《唐诗三百首》）"`
+	CategoryID   *int64    `json:"category_id,omitempty" description:"分类ID"`
+	AuthorID     *int64    `json:"author_id,omitempty" description:"作者ID"`
+	CategoryName string    `json:"category_name,omitempty" description:"分类名称"`
+	Tags         []string  `json:"tags,omitempty" description:"标签列表"`
+	CoverURL     string    `json:"cover_url,omitempty" description:"封面图片URL"`
+	Status       string    `json:"status" description:"状态: draft, published, archived"`
+	CreatedBy    *string   `json:"created_by,omitempty" description:"创建者ID"`
+	CreatedAt    time.Time `json:"created_at" description:"创建时间"`
+	UpdatedAt    time.Time `json:"updated_at" description:"更新时间"`
 	// 拼音字段（可手动校正多音字）
 	TitlePinyin   string `json:"title_pinyin" description:"标题拼音（带声调）"`
 	ContentPinyin string `json:"content_pinyin" description:"内容拼音（带声调）"`
 	// 简体字段（由繁体自动生成，可手动校正）
-	TitleSC   string `json:"title_sc" description:"标题（简体）"`
-	AuthorSC  string `json:"author_sc" description:"作者（简体）"`
-	ContentSC string `json:"content_sc" description:"内容（简体）"`
+	TitleSC        string `json:"title_sc" description:"标题（简体）"`
+	AuthorSC       string `json:"author_sc" description:"作者（简体）"`
+	ContentSC      string `json:"content_sc" description:"内容（简体）"`
+	TranslationSC  string `json:"translation_sc,omitempty" description:"译文（简体）"`
+	AppreciationSC string `json:"appreciation_sc,omitempty" description:"赏析（简体）"`
 }
 
 // AdminPoemCreateRequest 创建诗歌请求
 type AdminPoemCreateRequest struct {
-	Title         string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
-	Author        string   `json:"author" validate:"required,max=50" description:"作者"`
-	Dynasty       string   `json:"dynasty,omitempty" description:"朝代"`
-	Content       string   `json:"content" validate:"required" description:"原文内容"`
-	Translation   string   `json:"translation,omitempty" description:"现代译文"`
-	Appreciation  string   `json:"appreciation,omitempty" description:"赏析"`
-	Source        string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
-	CategoryID    *int64   `json:"category_id,omitempty" description:"分类ID"`
-	AuthorID      *int64   `json:"author_id,omitempty" description:"作者ID"`
-	Tags          []string `json:"tags,omitempty" description:"标签列表"`
-	CoverURL      string   `json:"cover_url,omitempty" description:"封面图片URL"`
-	Status        string   `json:"status,omitempty" description:"状态: draft/published/archived"`
+	Title        string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
+	Author       string   `json:"author" validate:"required,max=50" description:"作者"`
+	Dynasty      string   `json:"dynasty,omitempty" description:"朝代"`
+	Content      string   `json:"content" validate:"required" description:"原文内容"`
+	Translation  string   `json:"translation,omitempty" description:"现代译文"`
+	Appreciation string   `json:"appreciation,omitempty" description:"赏析"`
+	Source       string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
+	CategoryID   *int64   `json:"category_id,omitempty" description:"分类ID"`
+	AuthorID     *int64   `json:"author_id,omitempty" description:"作者ID"`
+	Tags         []string `json:"tags,omitempty" description:"标签列表"`
+	CoverURL     string   `json:"cover_url,omitempty" description:"封面图片URL"`
+	Status       string   `json:"status,omitempty" description:"状态: draft/published/archived"`
 	// 拼音字段（可手动校正多音字，留空则自动生成）
 	TitlePinyin   string `json:"title_pinyin,omitempty" description:"标题拼音（带声调）"`
 	ContentPinyin string `json:"content_pinyin,omitempty" description:"内容拼音（带声调）"`
 	// 简体字段（由繁体自动生成，可手动校正，留空则自动生成）
-	TitleSC   string `json:"title_sc,omitempty" description:"标题（简体）"`
-	AuthorSC  string `json:"author_sc,omitempty" description:"作者（简体）"`
-	ContentSC string `json:"content_sc,omitempty" description:"内容（简体）"`
+	TitleSC        string `json:"title_sc,omitempty" description:"标题（简体）"`
+	AuthorSC       string `json:"author_sc,omitempty" description:"作者（简体）"`
+	ContentSC      string `json:"content_sc,omitempty" description:"内容（简体）"`
+	TranslationSC  string `json:"translation_sc,omitempty" description:"译文（简体）"`
+	AppreciationSC string `json:"appreciation_sc,omitempty" description:"赏析（简体）"`
 }
 
 // AdminPoemUpdateRequest 更新诗歌请求
 type AdminPoemUpdateRequest struct {
-	Title         string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
-	Author        string   `json:"author" validate:"required,max=50" description:"作者"`
-	Dynasty       string   `json:"dynasty,omitempty" description:"朝代"`
-	Content       string   `json:"content" validate:"required" description:"原文内容"`
-	Translation   string   `json:"translation,omitempty" description:"现代译文"`
-	Appreciation  string   `json:"appreciation,omitempty" description:"赏析"`
-	Source        string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
-	CategoryID    *int64   `json:"category_id,omitempty" description:"分类ID"`
-	AuthorID      *int64   `json:"author_id,omitempty" description:"作者ID"`
-	Tags          []string `json:"tags,omitempty" description:"标签列表"`
-	CoverURL      string   `json:"cover_url,omitempty" description:"封面图片URL"`
-	Status        string   `json:"status,omitempty" description:"状态: draft/published/archived"`
+	Title        string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
+	Author       string   `json:"author" validate:"required,max=50" description:"作者"`
+	Dynasty      string   `json:"dynasty,omitempty" description:"朝代"`
+	Content      string   `json:"content" validate:"required" description:"原文内容"`
+	Translation  string   `json:"translation,omitempty" description:"现代译文"`
+	Appreciation string   `json:"appreciation,omitempty" description:"赏析"`
+	Source       string   `json:"source,omitempty" validate:"omitempty,max=200" description:"来源（如《唐诗三百首》）"`
+	CategoryID   *int64   `json:"category_id,omitempty" description:"分类ID"`
+	AuthorID     *int64   `json:"author_id,omitempty" description:"作者ID"`
+	Tags         []string `json:"tags,omitempty" description:"标签列表"`
+	CoverURL     string   `json:"cover_url,omitempty" description:"封面图片URL"`
+	Status       string   `json:"status,omitempty" description:"状态: draft/published/archived"`
 	// 拼音字段（可手动校正多音字，留空则自动生成）
 	TitlePinyin   string `json:"title_pinyin,omitempty" description:"标题拼音（带声调）"`
 	ContentPinyin string `json:"content_pinyin,omitempty" description:"内容拼音（带声调）"`
 	// 简体字段（由繁体自动生成，可手动校正，留空则自动生成）
-	TitleSC   string `json:"title_sc,omitempty" description:"标题（简体）"`
-	AuthorSC  string `json:"author_sc,omitempty" description:"作者（简体）"`
-	ContentSC string `json:"content_sc,omitempty" description:"内容（简体）"`
+	TitleSC        string `json:"title_sc,omitempty" description:"标题（简体）"`
+	AuthorSC       string `json:"author_sc,omitempty" description:"作者（简体）"`
+	ContentSC      string `json:"content_sc,omitempty" description:"内容（简体）"`
+	TranslationSC  string `json:"translation_sc,omitempty" description:"译文（简体）"`
+	AppreciationSC string `json:"appreciation_sc,omitempty" description:"赏析（简体）"`
 }
 
 // AdminPoemUpdateStatusRequest 更新诗歌状态请求
@@ -190,17 +196,17 @@ type AdminStatsDaily struct {
 
 // AdminStatsHotPoem 热门诗歌
 type AdminStatsHotPoem struct {
-	PoemID    int64  `json:"poemId" description:"诗歌ID"`
+	PoemID    int64  `json:"poem_id" description:"诗歌ID"`
 	Title     string `json:"title" description:"诗歌标题"`
 	Author    string `json:"author" description:"作者"`
-	ViewCount int64  `json:"viewCount" description:"浏览次数"`
+	ViewCount int64  `json:"view_count" description:"浏览次数"`
 }
 
 // AdminStatsUserGrowth 用户增长
 type AdminStatsUserGrowth struct {
 	Date       string `json:"date" description:"日期"`
-	NewUsers   int64  `json:"newUsers" description:"新增用户"`
-	TotalUsers int64  `json:"totalUsers" description:"累计用户"`
+	NewUsers   int64  `json:"new_users" description:"新增用户"`
+	TotalUsers int64  `json:"total_users" description:"累计用户"`
 }
 
 // ========== Banner 管理 ==========
@@ -209,9 +215,9 @@ type AdminStatsUserGrowth struct {
 type AdminBannerResponse struct {
 	ID        int64     `json:"id" description:"Banner ID"`
 	Title     string    `json:"title" description:"标题"`
-	ImageURL  string    `json:"imageUrl" description:"图片URL"`
-	LinkType  string    `json:"linkType" description:"链接类型: poem, url"`
-	LinkValue string    `json:"linkValue" description:"链接值"`
+	ImageURL  string    `json:"image_url" description:"图片URL"`
+	LinkType  string    `json:"link_type" description:"链接类型: poem, url"`
+	LinkValue string    `json:"link_value" description:"链接值"`
 	Sort      int       `json:"sort" description:"排序值"`
 	Status    string    `json:"status" description:"状态: active, inactive"`
 	CreatedAt time.Time `json:"created_at" description:"创建时间"`
@@ -221,9 +227,9 @@ type AdminBannerResponse struct {
 // AdminBannerCreateRequest 创建 Banner 请求
 type AdminBannerCreateRequest struct {
 	Title     string `json:"title" validate:"required,max=100" description:"标题"`
-	ImageURL  string `json:"imageUrl" validate:"required,max=500" description:"图片URL"`
-	LinkType  string `json:"linkType" validate:"required,oneof=poem url" description:"链接类型"`
-	LinkValue string `json:"linkValue" validate:"required,max=500" description:"链接值"`
+	ImageURL  string `json:"image_url" validate:"required,max=500" description:"图片URL"`
+	LinkType  string `json:"link_type" validate:"required,oneof=poem url" description:"链接类型"`
+	LinkValue string `json:"link_value" validate:"required,max=500" description:"链接值"`
 	Sort      int    `json:"sort,omitempty" description:"排序值"`
 	Status    string `json:"status,omitempty" validate:"omitempty,oneof=active inactive" description:"状态"`
 }
@@ -231,9 +237,9 @@ type AdminBannerCreateRequest struct {
 // AdminBannerUpdateRequest 更新 Banner 请求
 type AdminBannerUpdateRequest struct {
 	Title     string `json:"title" validate:"required,max=100" description:"标题"`
-	ImageURL  string `json:"imageUrl" validate:"required,max=500" description:"图片URL"`
-	LinkType  string `json:"linkType" validate:"required,oneof=poem url" description:"链接类型"`
-	LinkValue string `json:"linkValue" validate:"required,max=500" description:"链接值"`
+	ImageURL  string `json:"image_url" validate:"required,max=500" description:"图片URL"`
+	LinkType  string `json:"link_type" validate:"required,oneof=poem url" description:"链接类型"`
+	LinkValue string `json:"link_value" validate:"required,max=500" description:"链接值"`
 	Sort      int    `json:"sort,omitempty" description:"排序值"`
 	Status    string `json:"status,omitempty" validate:"omitempty,oneof=active inactive" description:"状态"`
 }
@@ -327,6 +333,42 @@ type AdminAuthorBatchMatchResponse struct {
 	Total     int64 `json:"total" description:"总条数"`
 	Matched   int64 `json:"matched" description:"成功匹配数"`
 	Unmatched int64 `json:"unmatched" description:"未匹配数"`
+}
+
+// ========== 打卡管理 ==========
+
+// AdminCheckinListItem 打卡记录列表项
+type AdminCheckinListItem struct {
+	ID              int64     `json:"id" description:"记录序号"`
+	UserID          string    `json:"user_id" description:"用户ID"`
+	Nickname        string    `json:"nickname" description:"用户昵称"`
+	CheckinDate     string    `json:"checkin_date" description:"打卡日期"`
+	PoemID          *int64    `json:"poem_id,omitempty" description:"关联诗歌ID"`
+	PoemTitle       *string   `json:"poem_title,omitempty" description:"诗歌标题"`
+	ConsecutiveDays int       `json:"consecutive_days" description:"连续打卡天数"`
+	CreatedAt       time.Time `json:"created_at" description:"打卡时间"`
+}
+
+// AdminCheckinListResponse 打卡记录列表响应
+type AdminCheckinListResponse struct {
+	Items []AdminCheckinListItem `json:"items" description:"打卡记录列表"`
+	Total int64                  `json:"total" description:"总条数"`
+}
+
+// AdminCheckinHotPoem 打卡热门诗歌
+type AdminCheckinHotPoem struct {
+	PoemID       int64  `json:"poem_id" description:"诗歌ID"`
+	PoemTitle    string `json:"poem_title" description:"诗歌标题"`
+	CheckinCount int64  `json:"checkin_count" description:"打卡次数"`
+}
+
+// AdminCheckinStats 打卡数据统计响应
+type AdminCheckinStats struct {
+	DailyAvgRate  float64             `json:"daily_avg_rate" description:"日均打卡率"`
+	Retention7d   float64             `json:"retention_7d" description:"7日留存率"`
+	TotalCheckins int64               `json:"total_checkins" description:"总打卡次数"`
+	TotalUsers    int64               `json:"total_users" description:"总打卡用户数"`
+	HotPoems      []AdminCheckinHotPoem `json:"hot_poems" description:"热门诗歌TOP10"`
 }
 
 // ========== 工具模块 ==========

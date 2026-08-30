@@ -22,7 +22,7 @@ func NewCategoryHandler(categoryService *admin.AdminCategoryService) *CategoryHa
 func (h *CategoryHandler) List(c fuego.ContextNoBody) (*response.APIResponse[[]adminmodel.AdminCategoryResponse], error) {
 	result, err := h.categoryService.List(c.Context())
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "list failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(result), nil
 }
@@ -36,13 +36,13 @@ func (h *CategoryHandler) Create(c fuego.ContextWithBody[adminmodel.AdminCategor
 
 	result, err := h.categoryService.Create(c.Context(), &body)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "create failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(*result), nil
 }
 
 // Update 更新分类
-func (h *CategoryHandler) Update(c fuego.ContextWithBody[adminmodel.AdminCategoryUpdateRequest]) (*response.APIResponse[any], error) {
+func (h *CategoryHandler) Update(c fuego.ContextWithBody[adminmodel.AdminCategoryUpdateRequest]) (*response.APIResponse[response.SimpleResponse], error) {
 	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "分类ID必须是数字"}
@@ -54,13 +54,13 @@ func (h *CategoryHandler) Update(c fuego.ContextWithBody[adminmodel.AdminCategor
 	}
 
 	if err := h.categoryService.Update(c.Context(), id, &body); err != nil {
-		return nil, fuego.InternalServerError{Title: "update failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
-	return response.OK[any](nil), nil
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }
 
 // Delete 删除分类
-func (h *CategoryHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
+func (h *CategoryHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[response.SimpleResponse], error) {
 	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "分类ID必须是数字"}
@@ -69,14 +69,14 @@ func (h *CategoryHandler) Delete(c fuego.ContextNoBody) (*response.APIResponse[a
 	// 检查是否有关联诗歌
 	count, err := h.categoryService.GetPoemCount(c.Context(), id)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "check failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	if count > 0 {
 		return nil, fuego.ConflictError{Title: "conflict", Detail: "该分类下还有诗歌，无法删除"}
 	}
 
 	if err := h.categoryService.Delete(c.Context(), id); err != nil {
-		return nil, fuego.InternalServerError{Title: "delete failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
-	return response.OK[any](nil), nil
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }

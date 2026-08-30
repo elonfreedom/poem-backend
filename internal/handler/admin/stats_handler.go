@@ -22,7 +22,7 @@ func NewStatsHandler(statsService *admin.AdminStatsService) *StatsHandler {
 func (h *StatsHandler) Overview(c fuego.ContextNoBody) (*response.APIResponse[adminmodel.AdminStatsOverview], error) {
 	result, err := h.statsService.Overview(c.Context())
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "overview failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(*result), nil
 }
@@ -36,7 +36,7 @@ func (h *StatsHandler) Daily(c fuego.ContextNoBody) (*response.APIResponse[[]adm
 
 	result, err := h.statsService.Daily(c.Context(), days)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "daily stats failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(result), nil
 }
@@ -50,7 +50,7 @@ func (h *StatsHandler) HotPoems(c fuego.ContextNoBody) (*response.APIResponse[[]
 
 	result, err := h.statsService.HotPoems(c.Context(), limit)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "hot poems failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(result), nil
 }
@@ -64,7 +64,7 @@ func (h *StatsHandler) UserGrowth(c fuego.ContextNoBody) (*response.APIResponse[
 
 	result, err := h.statsService.UserGrowth(c.Context(), days)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "user growth failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 	return response.OK(result), nil
 }

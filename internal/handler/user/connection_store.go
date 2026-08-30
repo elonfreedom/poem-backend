@@ -2,10 +2,14 @@ package user
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"poem-backend/internal/repository"
 )
+
+// ConnectionStatusTimeout 长轮询超时状态（内部使用）
+const ConnectionStatusTimeout ConnectionStatus = "_timeout"
 
 // connectionTTL 连接有效期
 const connectionTTL = 10 * time.Minute
@@ -41,14 +45,79 @@ const (
 	ConnectionStatusCompleted ConnectionStatus = "completed"
 )
 
-// ConnectionStore 跨设备连接存储（数据库持久化）
+// ConnectionStore 跨设备连接存储（数据库持久化 + 内存订阅）
 type ConnectionStore struct {
-	repo *repository.ConnectionRepository
+	mu          sync.Mutex
+	repo        *repository.ConnectionRepository
+	subscribers map[string][]chan ConnectionStatus // token -> 等待状态变化的订阅者
 }
+
+// connectionLongPollTimeout 长轮询超时时间
+const connectionLongPollTimeout = 30 * time.Second
 
 // NewConnectionStore 创建新的连接存储
 func NewConnectionStore(repo *repository.ConnectionRepository) *ConnectionStore {
-	return &ConnectionStore{repo: repo}
+	return &ConnectionStore{
+		repo:        repo,
+		subscribers: make(map[string][]chan ConnectionStatus),
+	}
+}
+
+// Subscribe 订阅连接状态变化，返回状态通道和清理函数
+// 当状态变化时，新状态会通过 channel 推送；超时则推送当前状态
+func (s *ConnectionStore) Subscribe(token string, timeout time.Duration) (<-chan ConnectionStatus, func()) {
+	ch := make(chan ConnectionStatus, 1)
+
+	s.mu.Lock()
+	s.subscribers[token] = append(s.subscribers[token], ch)
+	s.mu.Unlock()
+
+	cleanup := func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for i, c := range s.subscribers[token] {
+			if c == ch {
+				s.subscribers[token] = append(s.subscribers[token][:i], s.subscribers[token][i+1:]...)
+				break
+			}
+		}
+		if len(s.subscribers[token]) == 0 {
+			delete(s.subscribers, token)
+		}
+		close(ch)
+	}
+
+	// 超时兜底：超时后推送当前状态
+	go func() {
+		time.Sleep(timeout)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		// 检查是否已取消订阅
+		for _, c := range s.subscribers[token] {
+			if c == ch {
+				select {
+				case ch <- ConnectionStatusTimeout:
+				default:
+				}
+				break
+			}
+		}
+	}()
+
+	return ch, cleanup
+}
+
+// notifySubscribers 通知所有订阅者状态变化
+func (s *ConnectionStore) notifySubscribers(token string, status ConnectionStatus) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, ch := range s.subscribers[token] {
+		select {
+		case ch <- status:
+		default:
+		}
+	}
+	delete(s.subscribers, token)
 }
 
 // Store 存储连接
@@ -82,14 +151,19 @@ func (s *ConnectionStore) Get(token string) (*Connection, bool) {
 	}, true
 }
 
-// Update 更新连接
+// Update 更新连接（状态变化时通知订阅者）
 func (s *ConnectionStore) Update(token string, updater func(*Connection)) bool {
 	conn, ok := s.Get(token)
 	if !ok {
 		return false
 	}
+	oldStatus := conn.Status
 	updater(conn)
 	s.Store(token, conn)
+	// 状态变化时通知长轮询订阅者
+	if conn.Status != oldStatus {
+		s.notifySubscribers(token, conn.Status)
+	}
 	return true
 }
 

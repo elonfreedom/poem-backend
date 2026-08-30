@@ -41,7 +41,7 @@ func (h *AuthHandler) GetUserInfo(c fuego.ContextNoBody) (*response.APIResponse[
 
 	result, err := h.adminAuthService.GetUserInfo(c.Context(), userID)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: "get user info failed", Detail: err.Error()}
+		return nil, err // 透传 Service 错误
 	}
 
 	return response.OK(*result), nil
@@ -53,6 +53,6 @@ func (h *AuthHandler) GetAccessCodes(c fuego.ContextNoBody) (*response.APIRespon
 }
 
 // Logout 退出登录（适配 vben-admin /auth/logout）
-func (h *AuthHandler) Logout(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
-	return response.OK[any](nil), nil
+func (h *AuthHandler) Logout(c fuego.ContextNoBody) (*response.APIResponse[response.SimpleResponse], error) {
+	return response.OK(response.SimpleResponse{Success: true}), nil
 }

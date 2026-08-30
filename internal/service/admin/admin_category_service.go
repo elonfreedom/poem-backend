@@ -2,7 +2,12 @@ package admin
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
+
+	"github.com/go-fuego/fuego"
+	"github.com/jackc/pgx/v5"
 
 	"poem-backend/internal/model"
 	adminmodel "poem-backend/internal/model/admin"
@@ -21,7 +26,7 @@ func NewAdminCategoryService(categoryRepo *repository.CategoryRepository) *Admin
 func (s *AdminCategoryService) List(ctx context.Context) ([]adminmodel.AdminCategoryResponse, error) {
 	categories, err := s.categoryRepo.List(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询分类列表失败: %v", err)}
 	}
 
 	items := []adminmodel.AdminCategoryResponse{}
@@ -48,7 +53,7 @@ func (s *AdminCategoryService) Create(ctx context.Context, req *adminmodel.Admin
 		UpdatedAt: now,
 	}
 	if err := s.categoryRepo.Create(ctx, category); err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("创建分类失败: %v", err)}
 	}
 
 	return &adminmodel.AdminCategoryResponse{
@@ -65,14 +70,20 @@ func (s *AdminCategoryService) Create(ctx context.Context, req *adminmodel.Admin
 func (s *AdminCategoryService) Update(ctx context.Context, id int64, req *adminmodel.AdminCategoryUpdateRequest) error {
 	category, err := s.categoryRepo.GetByID(ctx, id)
 	if err != nil {
-		return err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fuego.NotFoundError{Title: "category not found", Detail: fmt.Sprintf("分类不存在: id=%d", id)}
+		}
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询分类失败: id=%d, error=%v", id, err)}
 	}
 
 	category.Name = req.Name
 	category.Sort = req.Sort
 	category.UpdatedAt = time.Now()
 
-	return s.categoryRepo.Update(ctx, category)
+	if err := s.categoryRepo.Update(ctx, category); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新分类失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 // GetPoemCount 获取分类下的诗歌数量
@@ -82,5 +93,8 @@ func (s *AdminCategoryService) GetPoemCount(ctx context.Context, categoryID int6
 
 // Delete 删除分类
 func (s *AdminCategoryService) Delete(ctx context.Context, id int64) error {
-	return s.categoryRepo.Delete(ctx, id)
+	if err := s.categoryRepo.Delete(ctx, id); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("删除分类失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }

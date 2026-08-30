@@ -2,7 +2,12 @@ package admin
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
+
+	"github.com/go-fuego/fuego"
+	"github.com/jackc/pgx/v5"
 
 	"poem-backend/internal/model"
 	adminmodel "poem-backend/internal/model/admin"
@@ -21,7 +26,7 @@ func NewAdminBannerService(bannerRepo *repository.BannerRepository) *AdminBanner
 func (s *AdminBannerService) List(ctx context.Context) ([]adminmodel.AdminBannerResponse, error) {
 	banners, err := s.bannerRepo.List(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询 Banner 列表失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminBannerResponse, 0, len(banners))
@@ -35,7 +40,10 @@ func (s *AdminBannerService) List(ctx context.Context) ([]adminmodel.AdminBanner
 func (s *AdminBannerService) GetByID(ctx context.Context, id int64) (*adminmodel.AdminBannerResponse, error) {
 	banner, err := s.bannerRepo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "banner not found", Detail: fmt.Sprintf("Banner 不存在: id=%d", id)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询 Banner 失败: id=%d, error=%v", id, err)}
 	}
 	resp := toAdminBannerResponse(*banner)
 	return &resp, nil
@@ -59,7 +67,7 @@ func (s *AdminBannerService) Create(ctx context.Context, req *adminmodel.AdminBa
 	}
 
 	if err := s.bannerRepo.Create(ctx, banner); err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("创建 Banner 失败: %v", err)}
 	}
 
 	resp := toAdminBannerResponse(*banner)
@@ -70,7 +78,10 @@ func (s *AdminBannerService) Create(ctx context.Context, req *adminmodel.AdminBa
 func (s *AdminBannerService) Update(ctx context.Context, id int64, req *adminmodel.AdminBannerUpdateRequest) error {
 	banner, err := s.bannerRepo.GetByID(ctx, id)
 	if err != nil {
-		return err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fuego.NotFoundError{Title: "banner not found", Detail: fmt.Sprintf("Banner 不存在: id=%d", id)}
+		}
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询 Banner 失败: id=%d, error=%v", id, err)}
 	}
 
 	banner.Title = req.Title
@@ -81,12 +92,18 @@ func (s *AdminBannerService) Update(ctx context.Context, id int64, req *adminmod
 	banner.Status = req.Status
 	banner.UpdatedAt = time.Now()
 
-	return s.bannerRepo.Update(ctx, banner)
+	if err := s.bannerRepo.Update(ctx, banner); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新 Banner 失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 // Delete 删除 Banner
 func (s *AdminBannerService) Delete(ctx context.Context, id int64) error {
-	return s.bannerRepo.Delete(ctx, id)
+	if err := s.bannerRepo.Delete(ctx, id); err != nil {
+		return fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("删除 Banner 失败: id=%d, error=%v", id, err)}
+	}
+	return nil
 }
 
 func toAdminBannerResponse(b model.Banner) adminmodel.AdminBannerResponse {
