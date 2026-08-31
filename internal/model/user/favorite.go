@@ -24,5 +24,5 @@ type FavoriteRequest struct {
 // FavoriteListResponse 收藏列表响应
 type FavoriteListResponse struct {
 	Total int                `json:"total" description:"总数"`
-	List  []FavoriteResponse `json:"list" description:"收藏列表"`
+	Items []FavoriteResponse `json:"items" description:"收藏列表"`
 }

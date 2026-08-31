@@ -188,7 +188,7 @@ func (h *SharedPlanHandler) GetMySharedPlans(c fuego.ContextNoBody) (*response.A
 
 // ==================== 订阅管理 ====================
 
-// Subscribe 订阅计划
+// Subscribe 订阅计划（排队机制）
 func (h *SharedPlanHandler) Subscribe(c fuego.ContextWithBody[usermodel.SubscribeRequest]) (*response.APIResponse[any], error) {
 	userID, err := RequireUserID(c)
 	if err != nil {
@@ -213,7 +213,56 @@ func (h *SharedPlanHandler) Subscribe(c fuego.ContextWithBody[usermodel.Subscrib
 	return response.Success(result), nil
 }
 
-// Unsubscribe 取消订阅
+// Activate 激活排队计划
+func (h *SharedPlanHandler) Activate(c fuego.ContextWithBody[usermodel.ActivateRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := ParsePathID(c, "id")
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	result, err := h.sharedPlanService.Activate(c.Context(), id, userID, body.StartDate)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.Success(result), nil
+}
+
+// QueueOrder 调整订阅队列顺序
+func (h *SharedPlanHandler) QueueOrder(c fuego.ContextWithBody[usermodel.QueueOrderRequest]) (*response.APIResponse[any], error) {
+	userID, err := RequireUserID(c)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := ParsePathID(c, "id")
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	if err := h.sharedPlanService.ReorderQueue(c.Context(), id, userID, body.Direction); err != nil {
+		return nil, err
+	}
+
+	return response.Success(StatusUpdated), nil
+}
+
+// Unsubscribe 取消订阅（软删除）
 func (h *SharedPlanHandler) Unsubscribe(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	userID, err := RequireUserID(c)
 	if err != nil {
@@ -229,7 +278,7 @@ func (h *SharedPlanHandler) Unsubscribe(c fuego.ContextNoBody) (*response.APIRes
 		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(StatusUnsubscribed), nil
+	return response.Success(StatusCancelled), nil
 }
 
 // SetStartDate 设置开始日期
@@ -256,22 +305,19 @@ func (h *SharedPlanHandler) SetStartDate(c fuego.ContextWithBody[usermodel.SetSt
 	return response.Success(StatusUpdated), nil
 }
 
-// GetMySubscriptions 获取我的订阅列表
+// GetMySubscriptions 获取我的订阅列表（排队机制新版响应）
 func (h *SharedPlanHandler) GetMySubscriptions(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	userID, err := RequireUserID(c)
 	if err != nil {
 		return nil, err
 	}
 
-	list, err := h.sharedPlanService.GetMySubscriptions(c.Context(), userID)
+	result, err := h.sharedPlanService.GetMySubscriptions(c.Context(), userID)
 	if err != nil {
 		return nil, err // 透传 Service 错误
 	}
 
-	return response.Success(PageResponse[usermodel.SubscribeListResponse]{
-		Items: list,
-		Total: int64(len(list)),
-	}), nil
+	return response.Success(result), nil
 }
 
 // ==================== 每日诗文 & 打卡 ====================

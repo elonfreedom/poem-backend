@@ -67,5 +67,5 @@ func (h *FavoriteHandler) ListFavorites(c fuego.ContextNoBody) (*response.APIRes
 		return nil, err // 透传 Service 错误
 	}
 
-	return response.PageOK(result.List, int64(result.Total)), nil
+	return response.PageOK(result.Items, int64(result.Total)), nil
 }

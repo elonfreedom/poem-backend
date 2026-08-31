@@ -345,14 +345,14 @@ func SetupUserRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config)
 		fuego.OptionOverrideDescription("获取订阅计划的所有打卡记录（用于热力图）"),
 		fuego.OptionTags("共享计划"),
 	)
-	fuego.Put(userGroup, "/subscriptions/{id}/pause", sharedPlanHandler.PauseSubscription,
-		fuego.OptionSummary("暂停订阅"),
-		fuego.OptionOverrideDescription("暂停订阅计划"),
+	fuego.Post(userGroup, "/subscriptions/{id}/activate", sharedPlanHandler.Activate,
+		fuego.OptionSummary("激活计划"),
+		fuego.OptionOverrideDescription("激活排队中的订阅计划"),
 		fuego.OptionTags("共享计划"),
 	)
-	fuego.Put(userGroup, "/subscriptions/{id}/resume", sharedPlanHandler.ResumeSubscription,
-		fuego.OptionSummary("恢复订阅"),
-		fuego.OptionOverrideDescription("恢复订阅计划"),
+	fuego.Patch(userGroup, "/subscriptions/{id}/queue-order", sharedPlanHandler.QueueOrder,
+		fuego.OptionSummary("调整队列顺序"),
+		fuego.OptionOverrideDescription("调整订阅计划在队列中的顺序（上移/下移）"),
 		fuego.OptionTags("共享计划"),
 	)
 

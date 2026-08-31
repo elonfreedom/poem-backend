@@ -75,6 +75,8 @@ var (
 	StatusFavorited    = StatusResponse{Status: "favorited"}
 	StatusUnfavorited  = StatusResponse{Status: "unfavorited"}
 	StatusUnsubscribed = StatusResponse{Status: "unsubscribed"}
+	StatusActivated    = StatusResponse{Status: "activated"}
+	StatusCancelled    = StatusResponse{Status: "cancelled"}
 )
 
 // PageResponse 分页响应

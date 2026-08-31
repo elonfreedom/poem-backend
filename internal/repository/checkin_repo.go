@@ -454,3 +454,55 @@ func (r *CheckinRepository) GetRanking(ctx context.Context, limit int) ([]usermo
 	}
 	return items, rows.Err()
 }
+
+// ==================== 排队机制新增方法 ====================
+
+// GetGlobalCheckedPoems 获取用户全局已打卡诗文 ID 列表（去重）
+func (r *CheckinRepository) GetGlobalCheckedPoems(ctx context.Context, userID string) ([]int64, error) {
+	query := `
+		SELECT DISTINCT pid
+		FROM checkins c
+		CROSS JOIN LATERAL unnest(c.poem_ids) AS pid
+		WHERE c.user_id = $1 AND c.subscription_id IS NOT NULL
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]int64, 0)
+	for rows.Next() {
+		var pid int64
+		if err := rows.Scan(&pid); err != nil {
+			return nil, err
+		}
+		list = append(list, pid)
+	}
+	return list, rows.Err()
+}
+
+// GetCheckedPoemsBySubscription 获取某订阅已打卡诗文 ID 列表（去重）
+func (r *CheckinRepository) GetCheckedPoemsBySubscription(ctx context.Context, subscriptionID int64) ([]int64, error) {
+	query := `
+		SELECT DISTINCT pid
+		FROM checkins
+		CROSS JOIN LATERAL unnest(poem_ids) AS pid
+		WHERE subscription_id = $1
+	`
+	rows, err := r.db.Query(ctx, query, subscriptionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]int64, 0)
+	for rows.Next() {
+		var pid int64
+		if err := rows.Scan(&pid); err != nil {
+			return nil, err
+		}
+		list = append(list, pid)
+	}
+	return list, rows.Err()
+}

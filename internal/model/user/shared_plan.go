@@ -21,13 +21,15 @@ type SharedPlan struct {
 
 // PlanSubscription 用户订阅关系
 type PlanSubscription struct {
-	ID           int64     `json:"id" db:"id" description:"订阅ID"`
-	UserID       string    `json:"user_id" db:"user_id" description:"用户ID"`
-	SharedPlanID int64     `json:"shared_plan_id" db:"shared_plan_id" description:"共享计划ID"`
-	StartDate    time.Time `json:"start_date" db:"start_date" description:"开始日期"`
-	Status       string    `json:"status" db:"status" description:"状态: active, completed, paused"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at" description:"订阅时间"`
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at" description:"更新时间"`
+	ID           int64      `json:"id" db:"id" description:"订阅ID"`
+	UserID       string     `json:"user_id" db:"user_id" description:"用户ID"`
+	SharedPlanID int64      `json:"shared_plan_id" db:"shared_plan_id" description:"共享计划ID"`
+	StartDate    *time.Time `json:"start_date" db:"start_date" description:"开始日期（仅当前计划有值）"`
+	Status       string     `json:"status" db:"status" description:"状态: subscribed, completed, cancelled"`
+	IsCurrent    bool       `json:"is_current" db:"is_current" description:"是否为当前计划"`
+	QueueOrder   int        `json:"queue_order" db:"queue_order" description:"队列排序（0=当前，1=下一个）"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at" description:"订阅时间"`
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at" description:"更新时间"`
 }
 
 // ==================== 请求/响应结构体 ====================
@@ -93,17 +95,17 @@ type PoemBrief struct {
 	Dynasty string `json:"dynasty" description:"朝代"`
 }
 
-// SubscribeListResponse 订阅列表响应
+// SubscribeListResponse 订阅列表响应（兼容旧版）
 type SubscribeListResponse struct {
-	ID           int64     `json:"id" description:"订阅ID"`
-	SharedPlanID int64     `json:"shared_plan_id" description:"共享计划ID"`
-	Title        string    `json:"title" description:"计划标题"`
-	Tags         []string  `json:"tags" description:"标签列表"`
-	DailyCount   int       `json:"daily_count" description:"每日阅读数量"`
-	TotalDays    int       `json:"total_days" description:"总天数"`
-	StartDate    time.Time `json:"start_date" description:"开始日期"`
-	Status       string    `json:"status" description:"状态"`
-	CreatedAt    time.Time `json:"created_at" description:"订阅时间"`
+	ID           int64      `json:"id" description:"订阅ID"`
+	SharedPlanID int64      `json:"shared_plan_id" description:"共享计划ID"`
+	Title        string     `json:"title" description:"计划标题"`
+	Tags         []string   `json:"tags" description:"标签列表"`
+	DailyCount   int        `json:"daily_count" description:"每日阅读数量"`
+	TotalDays    int        `json:"total_days" description:"总天数"`
+	StartDate    *time.Time `json:"start_date" description:"开始日期"`
+	Status       string     `json:"status" description:"状态"`
+	CreatedAt    time.Time  `json:"created_at" description:"订阅时间"`
 }
 
 // TodayPoemResponse 今日诗文响应
@@ -168,4 +170,46 @@ type CheckinResponse struct {
 	CompletedDays int     `json:"completed_days" description:"已完成天数"`
 	TotalDays     int     `json:"total_days" description:"总天数"`
 	ProgressRate  float64 `json:"progress_rate" description:"完成率"`
+}
+
+// ==================== 排队机制新增结构体 ====================
+
+// SubscribeResponse 订阅接口响应
+type SubscribeResponse struct {
+	ID             int64  `json:"id" description:"订阅ID"`
+	Status         string `json:"status" description:"状态: subscribed"`
+	IsCurrent      bool   `json:"is_current" description:"是否为当前计划"`
+	QueueOrder     int    `json:"queue_order" description:"排队顺序"`
+	EstimatedMonth string `json:"estimated_start_month,omitempty" description:"预计开始月份（YYYY-MM）"`
+}
+
+// SubscriptionItem 订阅列表项
+type SubscriptionItem struct {
+	ID             int64   `json:"id" description:"订阅ID"`
+	SharedPlanID   int64   `json:"shared_plan_id" description:"共享计划ID"`
+	Title          string  `json:"title" description:"计划标题"`
+	Status         string  `json:"status" description:"状态"`
+	IsCurrent      bool    `json:"is_current" description:"是否为当前计划"`
+	QueueOrder     int     `json:"queue_order" description:"排队顺序"`
+	StartDate      *string `json:"start_date" description:"开始日期"`
+	CompletedPoems []int64 `json:"completed_poems" description:"本计划已打卡诗文ID列表"`
+	TotalPoems     int     `json:"total_poems" description:"计划定义诗文总数"`
+	ActualTotal    int     `json:"actual_total" description:"实际需打卡数（扣除全局已读）"`
+	EstimatedMonth string  `json:"estimated_start_month,omitempty" description:"预计开始月份"`
+}
+
+// ActivateRequest 激活计划请求
+type ActivateRequest struct {
+	StartDate string `json:"start_date" validate:"required" description:"开始日期（YYYY-MM-DD）"`
+}
+
+// QueueOrderRequest 调整队列顺序请求
+type QueueOrderRequest struct {
+	Direction string `json:"direction" validate:"required,oneof=up down" description:"移动方向：up=上移，down=下移"`
+}
+
+// SubscriptionListResponse 订阅列表响应
+type SubscriptionListResponse struct {
+	Total int               `json:"total" description:"总条数"`
+	Items []SubscriptionItem `json:"items" description:"订阅列表"`
 }

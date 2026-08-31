@@ -234,12 +234,12 @@ func (r *SharedPlanRepository) GetSubscription(ctx context.Context, userID strin
 // GetSubscriptionByID 根据订阅ID获取
 func (r *SharedPlanRepository) GetSubscriptionByID(ctx context.Context, id int64) (*usermodel.PlanSubscription, error) {
 	query := `
-		SELECT id, user_id, shared_plan_id, start_date, status, created_at, updated_at
+		SELECT id, user_id, shared_plan_id, start_date, status, is_current, queue_order, created_at, updated_at
 		FROM plan_subscriptions WHERE id = $1
 	`
 	row := r.db.QueryRow(ctx, query, id)
 	var sub usermodel.PlanSubscription
-	err := row.Scan(&sub.ID, &sub.UserID, &sub.SharedPlanID, &sub.StartDate, &sub.Status, &sub.CreatedAt, &sub.UpdatedAt)
+	err := row.Scan(&sub.ID, &sub.UserID, &sub.SharedPlanID, &sub.StartDate, &sub.Status, &sub.IsCurrent, &sub.QueueOrder, &sub.CreatedAt, &sub.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -317,4 +317,149 @@ func (r *SharedPlanRepository) GetLastCheckinByPoem(ctx context.Context, userID 
 	parsedDate, _ := time.Parse("2006-01-02", checkinDate)
 	daysAgo = int(time.Since(parsedDate).Hours() / 24)
 	return checkinDate, planTitle, daysAgo, nil
+}
+
+// ==================== 排队机制新增方法 ====================
+
+// GetActiveSubscription 获取用户当前 is_current=true 的订阅
+func (r *SharedPlanRepository) GetActiveSubscription(ctx context.Context, userID string) (*usermodel.PlanSubscription, error) {
+	query := `
+		SELECT id, user_id, shared_plan_id, start_date, status, is_current, queue_order, created_at, updated_at
+		FROM plan_subscriptions WHERE user_id = $1 AND is_current = true
+		LIMIT 1
+	`
+	row := r.db.QueryRow(ctx, query, userID)
+	var sub usermodel.PlanSubscription
+	err := row.Scan(&sub.ID, &sub.UserID, &sub.SharedPlanID, &sub.StartDate, &sub.Status, &sub.IsCurrent, &sub.QueueOrder, &sub.CreatedAt, &sub.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &sub, nil
+}
+
+// GetSubscriptionsByUserID 获取用户所有订阅（按 queue_order 排序）
+func (r *SharedPlanRepository) GetSubscriptionsByUserID(ctx context.Context, userID string) ([]usermodel.PlanSubscription, error) {
+	query := `
+		SELECT id, user_id, shared_plan_id, start_date, status, is_current, queue_order, created_at, updated_at
+		FROM plan_subscriptions WHERE user_id = $1
+		ORDER BY queue_order ASC, created_at ASC
+	`
+	rows, err := r.db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]usermodel.PlanSubscription, 0)
+	for rows.Next() {
+		var sub usermodel.PlanSubscription
+		err := rows.Scan(&sub.ID, &sub.UserID, &sub.SharedPlanID, &sub.StartDate, &sub.Status, &sub.IsCurrent, &sub.QueueOrder, &sub.CreatedAt, &sub.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, sub)
+	}
+	return list, rows.Err()
+}
+
+// GetSubscriptionsByUserIDWithStatus 获取用户指定状态的订阅（按 queue_order 排序）
+func (r *SharedPlanRepository) GetSubscriptionsByUserIDWithStatus(ctx context.Context, userID string, status string) ([]usermodel.PlanSubscription, error) {
+	query := `
+		SELECT id, user_id, shared_plan_id, start_date, status, is_current, queue_order, created_at, updated_at
+		FROM plan_subscriptions WHERE user_id = $1 AND status = $2
+		ORDER BY queue_order ASC, created_at ASC
+	`
+	rows, err := r.db.Query(ctx, query, userID, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]usermodel.PlanSubscription, 0)
+	for rows.Next() {
+		var sub usermodel.PlanSubscription
+		err := rows.Scan(&sub.ID, &sub.UserID, &sub.SharedPlanID, &sub.StartDate, &sub.Status, &sub.IsCurrent, &sub.QueueOrder, &sub.CreatedAt, &sub.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, sub)
+	}
+	return list, rows.Err()
+}
+
+// SoftDeleteSubscription 软删除（status → cancelled）
+func (r *SharedPlanRepository) SoftDeleteSubscription(ctx context.Context, userID string, sharedPlanID int64) error {
+	_, err := r.db.Exec(ctx, `UPDATE plan_subscriptions SET status = 'cancelled', is_current = false, updated_at = NOW() WHERE user_id = $1 AND shared_plan_id = $2`, userID, sharedPlanID)
+	return err
+}
+
+// ActivateSubscription 激活订阅
+func (r *SharedPlanRepository) ActivateSubscription(ctx context.Context, subID int64, userID string, startDate time.Time) error {
+	_, err := r.db.Exec(ctx, `UPDATE plan_subscriptions SET is_current = true, status = 'subscribed', start_date = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, startDate, subID, userID)
+	return err
+}
+
+// DeactivateCurrentSubscription 取消当前计划标记
+func (r *SharedPlanRepository) DeactivateCurrentSubscription(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx, `UPDATE plan_subscriptions SET is_current = false, updated_at = NOW() WHERE user_id = $1 AND is_current = true`, userID)
+	return err
+}
+
+// UpdateQueueOrder 更新 queue_order
+func (r *SharedPlanRepository) UpdateQueueOrder(ctx context.Context, subID int64, queueOrder int) error {
+	_, err := r.db.Exec(ctx, `UPDATE plan_subscriptions SET queue_order = $1, updated_at = NOW() WHERE id = $2`, queueOrder, subID)
+	return err
+}
+
+// ShiftQueueOrders 批量前移 queue_order（大于 afterOrder 的全部 -1）
+func (r *SharedPlanRepository) ShiftQueueOrders(ctx context.Context, userID string, afterOrder int) error {
+	_, err := r.db.Exec(ctx, `UPDATE plan_subscriptions SET queue_order = queue_order - 1, updated_at = NOW() WHERE user_id = $1 AND queue_order > $2`, userID, afterOrder)
+	return err
+}
+
+// SwapQueueOrders 交换两个订阅的 queue_order（用于上下移动）
+func (r *SharedPlanRepository) SwapQueueOrders(ctx context.Context, userID string, subID1, subID2 int64) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE plan_subscriptions SET queue_order = sub.new_order, updated_at = NOW()
+		FROM (
+			SELECT id, CASE
+				WHEN id = $1 THEN (SELECT queue_order FROM plan_subscriptions WHERE id = $2)
+				ELSE (SELECT queue_order FROM plan_subscriptions WHERE id = $1)
+			END AS new_order
+			FROM plan_subscriptions
+			WHERE user_id = $3 AND id IN ($1, $2) AND status = 'subscribed'
+		) sub
+		WHERE plan_subscriptions.id = sub.id
+	`, subID1, subID2, userID)
+	return err
+}
+
+// GetSubscriptionByQueueOrder 根据 queue_order 查找订阅
+func (r *SharedPlanRepository) GetSubscriptionByQueueOrder(ctx context.Context, userID string, queueOrder int) (*usermodel.PlanSubscription, error) {
+	var sub usermodel.PlanSubscription
+	query := `SELECT id, user_id, shared_plan_id, start_date, status, is_current, queue_order, created_at, updated_at
+	          FROM plan_subscriptions WHERE user_id = $1 AND queue_order = $2 AND status = 'subscribed'`
+	err := r.db.QueryRow(ctx, query, userID, queueOrder).Scan(
+		&sub.ID, &sub.UserID, &sub.SharedPlanID, &sub.StartDate, &sub.Status,
+		&sub.IsCurrent, &sub.QueueOrder, &sub.CreatedAt, &sub.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &sub, nil
+}
+
+// RecalculateQueueOrders 重新计算用户所有 subscribed 订阅的 queue_order
+func (r *SharedPlanRepository) RecalculateQueueOrders(ctx context.Context, userID string) error {
+	query := `
+		UPDATE plan_subscriptions SET queue_order = sub.new_order, updated_at = NOW()
+		FROM (
+			SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC) - 1 AS new_order
+			FROM plan_subscriptions
+			WHERE user_id = $1 AND status = 'subscribed'
+		) sub
+		WHERE plan_subscriptions.id = sub.id
+	`
+	_, err := r.db.Exec(ctx, query, userID)
+	return err
 }

@@ -88,6 +88,6 @@ func (s *FavoriteService) ListFavorites(ctx context.Context, userID string, page
 
 	return &usermodel.FavoriteListResponse{
 		Total: int(total),
-		List:  list,
+		Items: list,
 	}, nil
 }
