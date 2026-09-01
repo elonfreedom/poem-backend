@@ -5,6 +5,7 @@ import (
 
 	adminmodel "poem-backend/internal/model/admin"
 	"poem-backend/internal/service/admin"
+	"poem-backend/pkg/convert"
 	"poem-backend/pkg/response"
 )
 
@@ -59,5 +60,48 @@ func (h *ToolsHandler) GenerateAuthorsFromPoems(c fuego.ContextNoBody) (*respons
 	if err != nil {
 		return nil, err // 透传 Service 错误
 	}
+	return response.OK(*result), nil
+}
+
+// ==================== 简繁体工具 ====================
+
+// DetectCharsType 检测文本的中文字符类型（简体/繁体/混合/未知）
+func (h *ToolsHandler) DetectCharsType(c fuego.ContextWithBody[adminmodel.AdminToolDetectCharsTypeRequest]) (*response.APIResponse[adminmodel.AdminToolDetectCharsTypeResponse], error) {
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	charType := convert.DetectCharsType(body.Text)
+	return response.OK(adminmodel.AdminToolDetectCharsTypeResponse{Type: string(charType)}), nil
+}
+
+// ConvertChars 将文本转换为简体或繁体
+func (h *ToolsHandler) ConvertChars(c fuego.ContextWithBody[adminmodel.AdminToolConvertCharsRequest]) (*response.APIResponse[adminmodel.AdminToolConvertCharsResponse], error) {
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	result, err := convert.ConvertChars(body.Text, body.Target)
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "convert failed", Detail: err.Error()}
+	}
+
+	return response.OK(adminmodel.AdminToolConvertCharsResponse{Text: result}), nil
+}
+
+// BatchConvertChars 批量转换指定诗歌的字符类型
+func (h *ToolsHandler) BatchConvertChars(c fuego.ContextWithBody[adminmodel.AdminToolBatchConvertCharsRequest]) (*response.APIResponse[adminmodel.AdminToolBatchConvertCharsResponse], error) {
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	result, err := h.poemService.BatchConvertChars(c.Context(), body.PoetryIDs, body.Target)
+	if err != nil {
+		return nil, err // 透传 Service 错误
+	}
+
 	return response.OK(*result), nil
 }

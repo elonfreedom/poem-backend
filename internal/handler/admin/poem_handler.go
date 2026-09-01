@@ -130,7 +130,8 @@ func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[ImportPoemsRequest]) (
 			continue
 		}
 
-		if _, err := h.poemService.Create(c.Context(), &req, &userID); err != nil {
+		created, err := h.poemService.Create(c.Context(), &req, &userID)
+		if err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, ImportError{
 				Index: i,
@@ -140,6 +141,9 @@ func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[ImportPoemsRequest]) (
 			continue
 		}
 		result.Success++
+		if created != nil {
+			result.IDs = append(result.IDs, created.ID)
+		}
 	}
 
 	return response.OK(result), nil
@@ -271,4 +275,5 @@ type ImportResponse struct {
 	Skipped int           `json:"skipped" description:"跳过数（重复）"`
 	Failed  int           `json:"failed" description:"失败数"`
 	Errors  []ImportError `json:"errors" description:"跳过/失败详情"`
+	IDs    []int64       `json:"ids" description:"成功导入的诗歌 ID 列表"`
 }

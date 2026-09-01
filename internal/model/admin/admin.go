@@ -79,7 +79,7 @@ type AdminPoemResponse struct {
 
 // AdminPoemCreateRequest 创建诗歌请求
 type AdminPoemCreateRequest struct {
-	Title        string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
+	Title        string   `json:"title" validate:"required,max=200" description:"诗歌标题"`
 	Author       string   `json:"author" validate:"required,max=50" description:"作者"`
 	Dynasty      string   `json:"dynasty,omitempty" description:"朝代"`
 	Content      string   `json:"content" validate:"required" description:"原文内容"`
@@ -104,7 +104,7 @@ type AdminPoemCreateRequest struct {
 
 // AdminPoemUpdateRequest 更新诗歌请求
 type AdminPoemUpdateRequest struct {
-	Title        string   `json:"title" validate:"required,max=100" description:"诗歌标题"`
+	Title        string   `json:"title" validate:"required,max=200" description:"诗歌标题"`
 	Author       string   `json:"author" validate:"required,max=50" description:"作者"`
 	Dynasty      string   `json:"dynasty,omitempty" description:"朝代"`
 	Content      string   `json:"content" validate:"required" description:"原文内容"`
@@ -226,7 +226,7 @@ type AdminBannerResponse struct {
 
 // AdminBannerCreateRequest 创建 Banner 请求
 type AdminBannerCreateRequest struct {
-	Title     string `json:"title" validate:"required,max=100" description:"标题"`
+	Title     string `json:"title" validate:"required,max=200" description:"标题"`
 	ImageURL  string `json:"image_url" validate:"required,max=500" description:"图片URL"`
 	LinkType  string `json:"link_type" validate:"required,oneof=poem url" description:"链接类型"`
 	LinkValue string `json:"link_value" validate:"required,max=500" description:"链接值"`
@@ -236,7 +236,7 @@ type AdminBannerCreateRequest struct {
 
 // AdminBannerUpdateRequest 更新 Banner 请求
 type AdminBannerUpdateRequest struct {
-	Title     string `json:"title" validate:"required,max=100" description:"标题"`
+	Title     string `json:"title" validate:"required,max=200" description:"标题"`
 	ImageURL  string `json:"image_url" validate:"required,max=500" description:"图片URL"`
 	LinkType  string `json:"link_type" validate:"required,oneof=poem url" description:"链接类型"`
 	LinkValue string `json:"link_value" validate:"required,max=500" description:"链接值"`
@@ -378,4 +378,40 @@ type AdminToolGenerateAuthorsResponse struct {
 	TotalUnique int `json:"total_unique" description:"诗歌中唯一作者数"`
 	Created     int `json:"created" description:"新建作者数"`
 	Skipped     int `json:"skipped" description:"已存在跳过数"`
+}
+
+// ========== 简繁体工具 ==========
+
+// AdminToolDetectCharsTypeRequest 检测字符类型请求
+type AdminToolDetectCharsTypeRequest struct {
+	Text string `json:"text" validate:"required" description:"待检测的文本"`
+}
+
+// AdminToolDetectCharsTypeResponse 检测字符类型响应
+type AdminToolDetectCharsTypeResponse struct {
+	Type string `json:"type" description:"字符类型: simplified, traditional, mixed, unknown"`
+}
+
+// AdminToolConvertCharsRequest 字符转换请求
+type AdminToolConvertCharsRequest struct {
+	Text   string `json:"text" validate:"required" description:"待转换的文本"`
+	Target string `json:"target" validate:"required,oneof=simplified traditional" description="目标类型: simplified 或 traditional"`
+}
+
+// AdminToolConvertCharsResponse 字符转换响应
+type AdminToolConvertCharsResponse struct {
+	Text string `json:"text" description:"转换后的文本"`
+}
+
+// AdminToolBatchConvertCharsRequest 批量转换字符请求
+type AdminToolBatchConvertCharsRequest struct {
+	PoetryIDs []int64 `json:"poetry_ids" validate:"required,min=1" description:"诗歌ID数组"`
+	Target    string  `json:"target" validate:"required,oneof=simplified traditional" description="目标类型: simplified 或 traditional"`
+}
+
+// AdminToolBatchConvertCharsResponse 批量转换字符响应
+type AdminToolBatchConvertCharsResponse struct {
+	Total     int    `json:"total" description:"请求处理的诗歌数"`
+	Converted int    `json:"converted" description:"成功转换的诗歌数"`
+	Message   string `json:"message" description:"处理结果描述"`
 }

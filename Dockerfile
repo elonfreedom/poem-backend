@@ -7,8 +7,6 @@
 # ---------- Stage 1: 构建 ----------
 FROM golang:1.26-alpine AS builder
 
-# Alpine 国内镜像加速
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk add --no-cache git ca-certificates tzdata
 
 # Go 模块代理（国内加速，可通过 build-arg 覆盖）
@@ -33,8 +31,6 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 # ---------- Stage 2: 运行 ----------
 FROM alpine:3.20
 
-# Alpine 国内镜像加速
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk add --no-cache ca-certificates tzdata ffmpeg \
     && addgroup -S appgroup \
     && adduser -S appuser -G appgroup

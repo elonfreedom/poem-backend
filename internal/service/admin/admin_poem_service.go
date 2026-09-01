@@ -269,6 +269,17 @@ func (s *AdminPoemService) EnsurePinyinForAllPoems(ctx context.Context) (int, er
 	return s.poemRepo.EnsurePinyinForAllPoems(ctx)
 }
 
+// BatchConvertChars 批量转换指定诗歌的字符类型
+// target: "simplified" 或 "traditional"
+// 返回处理结果统计
+func (s *AdminPoemService) BatchConvertChars(ctx context.Context, poetryIDs []int64, target string) (*adminmodel.AdminToolBatchConvertCharsResponse, error) {
+	result, err := s.poemRepo.BatchConvertChars(ctx, poetryIDs, target)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // toAdminPoemResponse 转换 Poem 为 AdminPoemResponse
 func toAdminPoemResponse(p model.Poem, categoryName *string) adminmodel.AdminPoemResponse {
 	resp := adminmodel.AdminPoemResponse{

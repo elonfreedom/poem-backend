@@ -339,4 +339,19 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionOverrideDescription("从已有诗歌作品中提取所有不重复的作者名，自动创建作者记录（跳过已存在的）"),
 		fuego.OptionTags("工具模块"),
 	)
+	fuego.Post(adminMgmt, "/tools/detect-chars-type", toolsHandler.DetectCharsType,
+		fuego.OptionSummary("检测字符类型"),
+		fuego.OptionOverrideDescription("检测文本的中文字符类型（简体/繁体/混合/未知）"),
+		fuego.OptionTags("工具模块"),
+	)
+	fuego.Post(adminMgmt, "/tools/convert-chars", toolsHandler.ConvertChars,
+		fuego.OptionSummary("转换字符类型"),
+		fuego.OptionOverrideDescription("将文本转换为简体或繁体中文"),
+		fuego.OptionTags("工具模块"),
+	)
+	fuego.Post(adminMgmt, "/tools/batch-convert-chars", toolsHandler.BatchConvertChars,
+		fuego.OptionSummary("批量转换字符"),
+		fuego.OptionOverrideDescription("批量转换指定诗歌的字符类型（简体/繁体）"),
+		fuego.OptionTags("工具模块"),
+	)
 }
