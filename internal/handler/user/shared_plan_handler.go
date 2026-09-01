@@ -306,13 +306,21 @@ func (h *SharedPlanHandler) SetStartDate(c fuego.ContextWithBody[usermodel.SetSt
 }
 
 // GetMySubscriptions 获取我的订阅列表（排队机制新版响应）
+// 查询参数：
+//   - status=active（默认）→ 只返回 subscribed + completed
+//   - status=all         → 返回全部（含 cancelled）
+//   - status=cancelled   → 只返回已取消
+//   - status=subscribed  → 只返回订阅中
+//   - status=completed   → 只返回已完成
 func (h *SharedPlanHandler) GetMySubscriptions(c fuego.ContextNoBody) (*response.APIResponse[any], error) {
 	userID, err := RequireUserID(c)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := h.sharedPlanService.GetMySubscriptions(c.Context(), userID)
+	status := c.QueryParam("status")
+
+	result, err := h.sharedPlanService.GetMySubscriptions(c.Context(), userID, status)
 	if err != nil {
 		return nil, err // 透传 Service 错误
 	}

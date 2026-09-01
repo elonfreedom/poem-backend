@@ -337,14 +337,42 @@ func (r *SharedPlanRepository) GetActiveSubscription(ctx context.Context, userID
 	return &sub, nil
 }
 
-// GetSubscriptionsByUserID 获取用户所有订阅（按 queue_order 排序）
-func (r *SharedPlanRepository) GetSubscriptionsByUserID(ctx context.Context, userID string) ([]usermodel.PlanSubscription, error) {
+// GetSubscriptionsByUserID 获取用户订阅（按 queue_order 排序）
+// status 过滤规则：
+//   - "" 或 "active" → 只返回 subscribed + completed（默认）
+//   - "all"          → 返回全部（含 cancelled）
+//   - "cancelled"    → 只返回 cancelled
+//   - "subscribed"   → 只返回 subscribed
+//   - "completed"    → 只返回 completed
+func (r *SharedPlanRepository) GetSubscriptionsByUserID(ctx context.Context, userID string, status string) ([]usermodel.PlanSubscription, error) {
 	query := `
 		SELECT id, user_id, shared_plan_id, start_date, status, is_current, queue_order, created_at, updated_at
 		FROM plan_subscriptions WHERE user_id = $1
-		ORDER BY queue_order ASC, created_at ASC
 	`
-	rows, err := r.db.Query(ctx, query, userID)
+	args := []any{userID}
+	argIdx := 2
+
+	switch status {
+	case "", "active":
+		query += fmt.Sprintf(" AND status IN ($%d, $%d)", argIdx, argIdx+1)
+		args = append(args, "subscribed", "completed")
+		argIdx += 2
+	case "all":
+		// 不加过滤
+	case "cancelled", "subscribed", "completed":
+		query += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, status)
+		argIdx++
+	default:
+		// 未知值按默认处理
+		query += fmt.Sprintf(" AND status IN ($%d, $%d)", argIdx, argIdx+1)
+		args = append(args, "subscribed", "completed")
+		argIdx += 2
+	}
+
+	query += " ORDER BY queue_order ASC, created_at ASC"
+
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

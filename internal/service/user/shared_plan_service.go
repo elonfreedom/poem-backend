@@ -453,9 +453,15 @@ func (s *SharedPlanService) SetStartDate(ctx context.Context, subID int64, userI
 }
 
 // GetMySubscriptions 获取我的订阅列表（排队机制新版响应）
-func (s *SharedPlanService) GetMySubscriptions(ctx context.Context, userID string) (*usermodel.SubscriptionListResponse, error) {
-	// 获取用户所有订阅
-	subs, err := s.sharedPlanRepo.GetSubscriptionsByUserID(ctx, userID)
+// status 过滤规则：
+//   - "" 或 "active" → 只返回 subscribed + completed（默认）
+//   - "all"          → 返回全部（含 cancelled）
+//   - "cancelled"    → 只返回 cancelled
+//   - "subscribed"   → 只返回 subscribed
+//   - "completed"    → 只返回 completed
+func (s *SharedPlanService) GetMySubscriptions(ctx context.Context, userID string, status string) (*usermodel.SubscriptionListResponse, error) {
+	// 获取用户订阅（按 status 过滤）
+	subs, err := s.sharedPlanRepo.GetSubscriptionsByUserID(ctx, userID, status)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询订阅列表失败: %v", err)}
 	}
