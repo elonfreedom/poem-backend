@@ -49,21 +49,6 @@ func (h *ImportRecordHandler) GetByID(c fuego.ContextNoBody) (*response.APIRespo
 	return response.OK(*record), nil
 }
 
-// Progress 获取导入进度（轻量，供轮询）
-func (h *ImportRecordHandler) Progress(c fuego.ContextNoBody) (*response.APIResponse[adminmodel.ImportProgress], error) {
-	id, err := strconv.ParseInt(c.PathParam("id"), 10, 64)
-	if err != nil {
-		return nil, fuego.BadRequestError{Title: "invalid id", Detail: "导入记录ID必须是数字"}
-	}
-
-	progress, err := h.importRecordService.GetProgress(c.Context(), id)
-	if err != nil {
-		return nil, err
-	}
-
-	return response.OK(*progress), nil
-}
-
 // Stats 获取导入统计
 func (h *ImportRecordHandler) Stats(c fuego.ContextNoBody) (*response.APIResponse[adminmodel.ImportRecordStatsResponse], error) {
 	status := c.QueryParam("status")

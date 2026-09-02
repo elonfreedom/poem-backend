@@ -38,16 +38,6 @@ type ImportRecordListRequest struct {
 	EndDate   string `query:"end_date" description:"结束日期 YYYY-MM-DD"`
 }
 
-// ImportProgress 导入进度（轻量响应，供轮询）
-type ImportProgress struct {
-	ID        int64  `json:"id" db:"id"`
-	Total     int    `json:"total" db:"total"`
-	Processed int    `json:"processed" db:"processed"`
-	Success   int    `json:"success" db:"success"`
-	Failed    int    `json:"failed" db:"failed"`
-	Status    string `json:"status" db:"status"`
-}
-
 // ImportRecordStatsResponse 统计响应
 type ImportRecordStatsResponse struct {
 	TotalImports int     `json:"total_imports" description:"总导入次数"`
