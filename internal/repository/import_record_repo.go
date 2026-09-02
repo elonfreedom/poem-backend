@@ -32,6 +32,17 @@ func (r *ImportRecordRepository) Create(ctx context.Context, record *adminmodel.
 	return id, err
 }
 
+// UpdateStatus 更新导入记录状态（用于导入过程中增量更新）
+func (r *ImportRecordRepository) UpdateStatus(ctx context.Context, id int64, success, failed int, status string, errors []adminmodel.ImportError) error {
+	query := `
+		UPDATE import_records
+		SET success = $1, failed = $2, status = $3, errors = $4, updated_at = NOW()
+		WHERE id = $5
+	`
+	_, err := r.db.Exec(ctx, query, success, failed, status, errors, id)
+	return err
+}
+
 // List 分页查询导入记录（支持筛选）
 func (r *ImportRecordRepository) List(ctx context.Context, page, pageSize int, status, startDate, endDate string) ([]adminmodel.ImportRecord, int, error) {
 	// 构建查询条件

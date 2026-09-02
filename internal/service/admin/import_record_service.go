@@ -36,6 +36,11 @@ func (s *ImportRecordService) Create(ctx context.Context, fileName, source strin
 	return s.importRecordRepo.Create(ctx, record)
 }
 
+// UpdateStatus 更新导入记录状态
+func (s *ImportRecordService) UpdateStatus(ctx context.Context, id int64, success, failed int, status string, errors []adminmodel.ImportError) error {
+	return s.importRecordRepo.UpdateStatus(ctx, id, success, failed, status, errors)
+}
+
 // List 分页列表
 func (s *ImportRecordService) List(ctx context.Context, page, pageSize int, status, startDate, endDate string) ([]adminmodel.ImportRecord, int, error) {
 	if page < 1 {

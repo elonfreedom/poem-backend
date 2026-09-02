@@ -78,6 +78,12 @@ func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[ImportPoemsRequest]) (
 	result := ImportResponse{Total: len(poems)}
 	userID := middleware.GetUserIDFromContext(c.Context())
 
+	// 导入开始时立即创建记录（processing 状态），超时后也能查看进度
+	var recordID int64
+	if h.importRecordService != nil {
+		recordID, _ = h.importRecordService.Create(c.Context(), "", body.Source, len(poems), 0, 0, []adminmodel.ImportError{}, &userID)
+	}
+
 	// 用于批次内去重：标题+作者
 	seen := make(map[string]bool)
 
@@ -151,16 +157,29 @@ func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[ImportPoemsRequest]) (
 		}
 	}
 
-	// 记录导入历史（失败不影响主流程）
-	if h.importRecordService != nil {
+	// 导入结束后更新记录为最终状态（失败不影响主流程）
+	if h.importRecordService != nil && recordID > 0 {
 		errors := make([]adminmodel.ImportError, len(result.Errors))
 		for i, e := range result.Errors {
 			errors[i] = adminmodel.ImportError{Index: e.Index, Title: e.Title, Error: e.Error}
 		}
-		_, _ = h.importRecordService.Create(c.Context(), "", body.Source, result.Total, result.Success, result.Failed, errors, &userID)
+		status := computeImportStatus(result.Success, result.Failed)
+		_ = h.importRecordService.UpdateStatus(c.Context(), recordID, result.Success, result.Failed, status, errors)
 	}
 
 	return response.OK(result), nil
+}
+
+// computeImportStatus 根据成功/失败数计算导入状态
+func computeImportStatus(success, failed int) string {
+	switch {
+	case failed == 0:
+		return "success"
+	case success == 0:
+		return "failed"
+	default:
+		return "partial"
+	}
 }
 
 // List 获取诗歌列表
