@@ -62,6 +62,11 @@ func (s *ImportRecordService) GetByID(ctx context.Context, id int64) (*adminmode
 	return s.importRecordRepo.GetByID(ctx, id)
 }
 
+// GetProgress 获取导入进度
+func (s *ImportRecordService) GetProgress(ctx context.Context, id int64) (*adminmodel.ImportProgress, error) {
+	return s.importRecordRepo.GetProgress(ctx, id)
+}
+
 // GetStats 统计
 func (s *ImportRecordService) GetStats(ctx context.Context, status, startDate, endDate string) (*adminmodel.ImportRecordStatsResponse, error) {
 	return s.importRecordRepo.GetStats(ctx, status, startDate, endDate)

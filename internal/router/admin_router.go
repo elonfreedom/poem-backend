@@ -152,6 +152,11 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionOverrideDescription("获取导入汇总统计数据"),
 		fuego.OptionTags("诗歌管理"),
 	)
+	fuego.Get(adminMgmt, "/poems/import-records/{id}/progress", importRecordHandler.Progress,
+		fuego.OptionSummary("导入进度"),
+		fuego.OptionOverrideDescription("获取导入实时进度（轻量，供轮询）"),
+		fuego.OptionTags("诗歌管理"),
+	)
 	fuego.Get(adminMgmt, "/poems/import-records/{id}", importRecordHandler.GetByID,
 		fuego.OptionSummary("导入记录详情"),
 		fuego.OptionOverrideDescription("获取单条导入记录的详细信息"),

@@ -137,6 +137,22 @@ func (r *ImportRecordRepository) GetByID(ctx context.Context, id int64) (*adminm
 	return &rec, nil
 }
 
+// GetProgress 获取导入进度（轻量查询，不含 errors）
+func (r *ImportRecordRepository) GetProgress(ctx context.Context, id int64) (*adminmodel.ImportProgress, error) {
+	query := `
+		SELECT id, total, processed, success, failed, status
+		FROM import_records WHERE id = $1
+	`
+	var p adminmodel.ImportProgress
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&p.ID, &p.Total, &p.Processed, &p.Success, &p.Failed, &p.Status,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // GetStats 汇总统计
 func (r *ImportRecordRepository) GetStats(ctx context.Context, status, startDate, endDate string) (*adminmodel.ImportRecordStatsResponse, error) {
 	where := "WHERE 1=1"
