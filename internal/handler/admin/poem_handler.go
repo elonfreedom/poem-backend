@@ -3,7 +3,6 @@ package admin
 import (
 	"context"
 	"strconv"
-	"time"
 
 	"github.com/go-fuego/fuego"
 
@@ -56,7 +55,7 @@ type ImportPoemsRequest struct {
 	Poems  []adminmodel.AdminPoemCreateRequest `json:"poems" description:"诗歌列表"`
 }
 
-// ImportPoems 批量导入诗歌（异步处理）
+// ImportPoems 批量导入诗歌（同步处理）
 // 支持两种请求格式：
 // 1. JSON 数组：[{title, author, content, status, source?}, ...]
 // 2. JSON 对象：{source: "唐诗三百首", poems: [{title, author, content, status}, ...]}
@@ -79,25 +78,24 @@ func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[ImportPoemsRequest]) (
 
 	userID := middleware.GetUserIDFromContext(c.Context())
 
-	// 导入开始时立即创建记录（processing 状态），超时后也能查看进度
+	// 创建导入记录
 	var recordID int64
 	if h.importRecordService != nil {
 		recordID, _ = h.importRecordService.Create(c.Context(), "", body.Source, len(poems), 0, 0, []adminmodel.ImportError{}, &userID)
 	}
 
-	// 返回 recordID，前端用它轮询进度
-	result := ImportResponse{
-		Total:    len(poems),
-		RecordID: recordID,
-	}
+	// 同步处理
+	result := h.syncProcessPoems(c.Context(), poems, defaultSource, &userID)
+	result.RecordID = recordID
 
-	// 后台异步处理
+	// 更新最终状态
 	if h.importRecordService != nil && recordID > 0 {
-		ctx := context.Background() // 脱离请求上下文
-		go h.processPoems(ctx, recordID, poems, defaultSource, &userID)
-	} else {
-		// 无 record 服务时，同步降级（保持兼容）
-		result = h.syncProcessPoems(c.Context(), poems, defaultSource, &userID)
+		errors := make([]adminmodel.ImportError, len(result.Errors))
+		for i, e := range result.Errors {
+			errors[i] = adminmodel.ImportError{Index: e.Index, Title: e.Title, Error: e.Error}
+		}
+		status := computeImportStatus(result.Success, result.Failed)
+		_ = h.importRecordService.UpdateStatus(c.Context(), recordID, result.Success, result.Failed, status, errors)
 	}
 
 	return response.OK(result), nil
@@ -153,81 +151,6 @@ func (h *PoemHandler) syncProcessPoems(ctx context.Context, poems []adminmodel.A
 	}
 
 	return result
-}
-
-// processPoems 后台异步处理导入
-func (h *PoemHandler) processPoems(ctx context.Context, recordID int64, poems []adminmodel.AdminPoemCreateRequest, defaultSource string, userID *string) {
-	// panic 恢复，确保记录最终状态
-	defer func() {
-		if r := recover(); r != nil {
-			_ = h.importRecordService.UpdateStatus(ctx, recordID, 0, 0, "failed", []adminmodel.ImportError{
-				{Index: 0, Title: "", Error: "导入进程异常终止"},
-			})
-		}
-	}()
-
-	result := ImportResponse{Total: len(poems)}
-	seen := make(map[string]bool)
-	lastFlush := time.Now()
-
-	for i, req := range poems {
-		if req.Title == "" || req.Author == "" || req.Content == "" || req.Status == "" {
-			result.Failed++
-			result.Errors = append(result.Errors, ImportError{Index: i, Title: req.Title, Error: "缺少必填字段：title、author、content、status"})
-			continue
-		}
-
-		firstLine := firstContentLine(req.Content)
-		dedupKey := req.Title + "|" + req.Author + "|" + firstLine
-		if seen[dedupKey] {
-			result.Skipped++
-			result.Errors = append(result.Errors, ImportError{Index: i, Title: req.Title, Error: "批次内重复（标题+作者+首句相同），已跳过"})
-			continue
-		}
-		seen[dedupKey] = true
-
-		if req.Source == "" && defaultSource != "" {
-			req.Source = defaultSource
-		}
-
-		exists, err := h.poemService.ExistsByTitleAuthorFirstLine(ctx, req.Title, req.Author, firstLine)
-		if err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, ImportError{Index: i, Title: req.Title, Error: "查重失败：" + err.Error()})
-			continue
-		}
-		if exists {
-			result.Skipped++
-			result.Errors = append(result.Errors, ImportError{Index: i, Title: req.Title, Error: "数据库中已存在（标题+作者+首句相同），已跳过"})
-			continue
-		}
-
-		created, err := h.poemService.Create(ctx, &req, userID)
-		if err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, ImportError{Index: i, Title: req.Title, Error: err.Error()})
-			continue
-		}
-		result.Success++
-		if created != nil {
-			result.IDs = append(result.IDs, created.ID)
-		}
-
-		// 每处理 50 首或每 2 秒，更新一次进度
-		processed := i + 1
-		if processed%50 == 0 || time.Since(lastFlush) > 2*time.Second {
-			_ = h.importRecordService.UpdateProgress(ctx, recordID, processed, result.Success, result.Failed)
-			lastFlush = time.Now()
-		}
-	}
-
-	// 最终更新：status + errors
-	errors := make([]adminmodel.ImportError, len(result.Errors))
-	for i, e := range result.Errors {
-		errors[i] = adminmodel.ImportError{Index: e.Index, Title: e.Title, Error: e.Error}
-	}
-	status := computeImportStatus(result.Success, result.Failed)
-	_ = h.importRecordService.UpdateStatus(ctx, recordID, result.Success, result.Failed, status, errors)
 }
 
 // computeImportStatus 根据成功/失败数计算导入状态
