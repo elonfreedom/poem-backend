@@ -28,6 +28,7 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	readingPlanRepo := repository.NewReadingPlanRepository(db)
 	passkeyRepo := repository.NewPasskeyRepository(db)
 	authorRepo := repository.NewAuthorRepository(db)
+	importRecordRepo := repository.NewImportRecordRepository(db)
 
 	// 初始化 Service
 	adminAuthService := adminservice.NewAdminAuthService(userRepo, cfg.JWT.Secret, cfg.JWT.ExpireHour)
@@ -41,6 +42,7 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	adminUserService := adminservice.NewAdminUserService(userRepo, checkinRepo, favoriteRepo, readingPlanRepo, passkeyRepo)
 	adminAuthorService := adminservice.NewAdminAuthorService(authorRepo)
 	adminCheckinService := adminservice.NewAdminCheckinService(checkinRepo)
+	importRecordService := adminservice.NewImportRecordService(importRecordRepo)
 
 	// 初始化 Handler
 	authHandler := admin.NewAuthHandler(adminAuthService)
@@ -55,6 +57,10 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	authorHandler := admin.NewAuthorHandler(adminAuthorService)
 	checkinHandler := admin.NewCheckinHandler(adminCheckinService)
 	toolsHandler := tools.NewToolsHandler(adminPoemService, adminAuthorService)
+	importRecordHandler := admin.NewImportRecordHandler(importRecordService)
+
+	// 注入 importRecordService 到 poemHandler
+	poemHandler = admin.NewPoemHandlerWithImportRecord(adminPoemService, importRecordService)
 
 	// ========== 后台管理路由组（端口 8081，全部以 /api/admin 开头）==========
 	adminGroup := fuego.Group(server, "/api/admin")
@@ -133,6 +139,22 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 	fuego.Put(adminMgmt, "/poems/batch/status", poemHandler.BatchUpdateStatus,
 		fuego.OptionSummary("批量更新诗歌状态"),
 		fuego.OptionOverrideDescription("批量更新多首诗歌的状态"),
+		fuego.OptionTags("诗歌管理"),
+	)
+	// [导入记录]
+	fuego.Get(adminMgmt, "/poems/import-records", importRecordHandler.List,
+		fuego.OptionSummary("导入记录列表"),
+		fuego.OptionOverrideDescription("分页查询诗歌导入历史记录"),
+		fuego.OptionTags("诗歌管理"),
+	)
+	fuego.Get(adminMgmt, "/poems/import-records/stats", importRecordHandler.Stats,
+		fuego.OptionSummary("导入统计"),
+		fuego.OptionOverrideDescription("获取导入汇总统计数据"),
+		fuego.OptionTags("诗歌管理"),
+	)
+	fuego.Get(adminMgmt, "/poems/import-records/{id}", importRecordHandler.GetByID,
+		fuego.OptionSummary("导入记录详情"),
+		fuego.OptionOverrideDescription("获取单条导入记录的详细信息"),
 		fuego.OptionTags("诗歌管理"),
 	)
 	// [作者管理]

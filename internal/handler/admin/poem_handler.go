@@ -12,11 +12,16 @@ import (
 )
 
 type PoemHandler struct {
-	poemService *admin.AdminPoemService
+	poemService         *admin.AdminPoemService
+	importRecordService *admin.ImportRecordService
 }
 
 func NewPoemHandler(poemService *admin.AdminPoemService) *PoemHandler {
 	return &PoemHandler{poemService: poemService}
+}
+
+func NewPoemHandlerWithImportRecord(poemService *admin.AdminPoemService, importRecordService *admin.ImportRecordService) *PoemHandler {
+	return &PoemHandler{poemService: poemService, importRecordService: importRecordService}
 }
 
 // ImportError 单条导入错误（失败或跳过）
@@ -144,6 +149,15 @@ func (h *PoemHandler) ImportPoems(c fuego.ContextWithBody[ImportPoemsRequest]) (
 		if created != nil {
 			result.IDs = append(result.IDs, created.ID)
 		}
+	}
+
+	// 记录导入历史（失败不影响主流程）
+	if h.importRecordService != nil {
+		errors := make([]adminmodel.ImportError, len(result.Errors))
+		for i, e := range result.Errors {
+			errors[i] = adminmodel.ImportError{Index: e.Index, Title: e.Title, Error: e.Error}
+		}
+		_, _ = h.importRecordService.Create(c.Context(), "", body.Source, result.Total, result.Success, result.Failed, errors, &userID)
 	}
 
 	return response.OK(result), nil
