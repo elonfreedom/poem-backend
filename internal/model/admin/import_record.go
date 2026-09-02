@@ -10,12 +10,14 @@ type ImportRecord struct {
 	FileName  string          `json:"file_name" db:"file_name"`
 	Source    string          `json:"source" db:"source"`
 	Total     int             `json:"total" db:"total"`
+	Processed int             `json:"processed" db:"processed"`
 	Success   int             `json:"success" db:"success"`
 	Failed    int             `json:"failed" db:"failed"`
 	Status    string          `json:"status" db:"status"`
 	Errors    []ImportError   `json:"errors" db:"errors"`
 	CreatedBy *string         `json:"created_by" db:"created_by"`
 	CreatedAt time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at" db:"updated_at"`
 }
 
 // ImportError 导入错误详情

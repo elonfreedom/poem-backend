@@ -32,7 +32,18 @@ func (r *ImportRecordRepository) Create(ctx context.Context, record *adminmodel.
 	return id, err
 }
 
-// UpdateStatus 更新导入记录状态（用于导入过程中增量更新）
+// UpdateProgress 增量更新进度（processed 计数）
+func (r *ImportRecordRepository) UpdateProgress(ctx context.Context, id int64, processed, success, failed int) error {
+	query := `
+		UPDATE import_records
+		SET processed = $1, success = $2, failed = $3, updated_at = NOW()
+		WHERE id = $4
+	`
+	_, err := r.db.Exec(ctx, query, processed, success, failed, id)
+	return err
+}
+
+// UpdateStatus 更新导入记录状态（用于导入完成后更新）
 func (r *ImportRecordRepository) UpdateStatus(ctx context.Context, id int64, success, failed int, status string, errors []adminmodel.ImportError) error {
 	query := `
 		UPDATE import_records
@@ -75,7 +86,7 @@ func (r *ImportRecordRepository) List(ctx context.Context, page, pageSize int, s
 
 	// 查询列表
 	listQuery := fmt.Sprintf(`
-		SELECT id, file_name, source, total, success, failed, status, errors, created_by, created_at
+		SELECT id, file_name, source, total, processed, success, failed, status, errors, created_by, created_at, updated_at
 		FROM import_records %s
 		ORDER BY created_at DESC
 		LIMIT $%d OFFSET $%d
@@ -96,8 +107,8 @@ func (r *ImportRecordRepository) List(ctx context.Context, page, pageSize int, s
 	for rows.Next() {
 		var rec adminmodel.ImportRecord
 		if err := rows.Scan(
-			&rec.ID, &rec.FileName, &rec.Source, &rec.Total, &rec.Success, &rec.Failed,
-			&rec.Status, &rec.Errors, &rec.CreatedBy, &rec.CreatedAt,
+			&rec.ID, &rec.FileName, &rec.Source, &rec.Total, &rec.Processed, &rec.Success, &rec.Failed,
+			&rec.Status, &rec.Errors, &rec.CreatedBy, &rec.CreatedAt, &rec.UpdatedAt,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -113,13 +124,13 @@ func (r *ImportRecordRepository) List(ctx context.Context, page, pageSize int, s
 // GetByID 获取单条导入记录
 func (r *ImportRecordRepository) GetByID(ctx context.Context, id int64) (*adminmodel.ImportRecord, error) {
 	query := `
-		SELECT id, file_name, source, total, success, failed, status, errors, created_by, created_at
+		SELECT id, file_name, source, total, processed, success, failed, status, errors, created_by, created_at, updated_at
 		FROM import_records WHERE id = $1
 	`
 	var rec adminmodel.ImportRecord
 	if err := r.db.QueryRow(ctx, query, id).Scan(
-		&rec.ID, &rec.FileName, &rec.Source, &rec.Total, &rec.Success, &rec.Failed,
-		&rec.Status, &rec.Errors, &rec.CreatedBy, &rec.CreatedAt,
+		&rec.ID, &rec.FileName, &rec.Source, &rec.Total, &rec.Processed, &rec.Success, &rec.Failed,
+		&rec.Status, &rec.Errors, &rec.CreatedBy, &rec.CreatedAt, &rec.UpdatedAt,
 	); err != nil {
 		return nil, err
 	}

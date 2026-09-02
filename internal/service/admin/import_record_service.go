@@ -36,6 +36,11 @@ func (s *ImportRecordService) Create(ctx context.Context, fileName, source strin
 	return s.importRecordRepo.Create(ctx, record)
 }
 
+// UpdateProgress 增量更新进度
+func (s *ImportRecordService) UpdateProgress(ctx context.Context, id int64, processed, success, failed int) error {
+	return s.importRecordRepo.UpdateProgress(ctx, id, processed, success, failed)
+}
+
 // UpdateStatus 更新导入记录状态
 func (s *ImportRecordService) UpdateStatus(ctx context.Context, id int64, success, failed int, status string, errors []adminmodel.ImportError) error {
 	return s.importRecordRepo.UpdateStatus(ctx, id, success, failed, status, errors)
