@@ -172,6 +172,7 @@ func (h *PoemHandler) List(c fuego.ContextNoBody) (*response.APIResponse[respons
 	status := c.QueryParam("status")
 	keyword := c.QueryParam("keyword")
 	dynasty := c.QueryParam("dynasty")
+	searchScope := c.QueryParam("search_scope")
 
 	var categoryID *int64
 	if cid, err := strconv.ParseInt(c.QueryParam("category_id"), 10, 64); err == nil {
@@ -183,7 +184,7 @@ func (h *PoemHandler) List(c fuego.ContextNoBody) (*response.APIResponse[respons
 		authorID = &aid
 	}
 
-	result, err := h.poemService.List(c.Context(), page, pageSize, categoryID, status, keyword, dynasty, authorID)
+	result, err := h.poemService.List(c.Context(), page, pageSize, categoryID, status, keyword, dynasty, authorID, searchScope)
 	if err != nil {
 		return nil, err // 透传 Service 错误
 	}

@@ -32,7 +32,8 @@ func (s *AdminPoemService) ExistsByTitleAuthorFirstLine(ctx context.Context, tit
 }
 
 // List 分页获取诗歌列表
-func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword, dynasty string, authorID *int64) (*response.PageData[adminmodel.AdminPoemResponse], error) {
+// searchScope: "title" 只搜标题, "author" 只搜作者, 空或其他值搜全部
+func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword, dynasty string, authorID *int64, searchScope string) (*response.PageData[adminmodel.AdminPoemResponse], error) {
 	if page < 1 {
 		page = 1
 	}
@@ -40,7 +41,7 @@ func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categor
 		pageSize = 20
 	}
 
-	poems, total, err := s.poemRepo.ListAll(ctx, page, pageSize, categoryID, status, keyword, dynasty, authorID)
+	poems, total, err := s.poemRepo.ListAll(ctx, page, pageSize, categoryID, status, keyword, dynasty, authorID, searchScope)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询诗歌列表失败: %v", err)}
 	}

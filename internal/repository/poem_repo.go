@@ -211,7 +211,8 @@ type PoemWithCategory struct {
 }
 
 // ListAll 获取诗歌列表（admin 用，不过滤 status）
-func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword, dynasty string, authorID *int64) ([]PoemWithCategory, int64, error) {
+// searchScope: "title" 只搜标题, "author" 只搜作者, 空或其他值搜全部
+func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword, dynasty string, authorID *int64, searchScope string) ([]PoemWithCategory, int64, error) {
 	where := "WHERE 1=1"
 	args := []interface{}{}
 	argIdx := 1
@@ -237,10 +238,20 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 		argIdx++
 	}
 	if keyword != "" {
-		where += fmt.Sprintf(" AND (p.title ILIKE $%d OR p.author ILIKE $%d OR p.title_sc ILIKE $%d OR p.author_sc ILIKE $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3)
 		likePattern := "%" + keyword + "%"
-		args = append(args, likePattern, likePattern, likePattern, likePattern)
-		argIdx += 4
+		if searchScope == "title" {
+			where += fmt.Sprintf(" AND (p.title ILIKE $%d OR p.title_sc ILIKE $%d)", argIdx, argIdx+1)
+			args = append(args, likePattern, likePattern)
+			argIdx += 2
+		} else if searchScope == "author" {
+			where += fmt.Sprintf(" AND (p.author ILIKE $%d OR p.author_sc ILIKE $%d)", argIdx, argIdx+1)
+			args = append(args, likePattern, likePattern)
+			argIdx += 2
+		} else {
+			where += fmt.Sprintf(" AND (p.title ILIKE $%d OR p.author ILIKE $%d OR p.title_sc ILIKE $%d OR p.author_sc ILIKE $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3)
+			args = append(args, likePattern, likePattern, likePattern, likePattern)
+			argIdx += 4
+		}
 	}
 
 	countQuery := "SELECT COUNT(*) FROM poems p LEFT JOIN authors a ON p.author_id = a.id " + where
