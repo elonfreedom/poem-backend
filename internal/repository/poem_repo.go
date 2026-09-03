@@ -135,9 +135,9 @@ func (r *PoemRepository) GetByID(ctx context.Context, id int64) (*model.Poem, er
 
 // Search 搜索诗歌（JOIN authors 表，以作者朝代为准）
 func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageSize int) ([]model.Poem, int64, error) {
-	where := `WHERE p.status = 'published' AND (p.title ILIKE $1 OR p.author ILIKE $2 OR p.content ILIKE $3)`
+	where := `WHERE p.status = 'published' AND (p.title ILIKE $1 OR p.author ILIKE $2 OR p.content ILIKE $3 OR p.title_sc ILIKE $4 OR p.author_sc ILIKE $5 OR p.content_sc ILIKE $6)`
 	likePattern := "%" + keyword + "%"
-	args := []interface{}{likePattern, likePattern, likePattern}
+	args := []interface{}{likePattern, likePattern, likePattern, likePattern, likePattern, likePattern}
 
 	// 获取总数
 	countQuery := "SELECT COUNT(*) FROM poems p LEFT JOIN authors a ON p.author_id = a.id " + where
@@ -154,7 +154,7 @@ func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageS
 		FROM poems p
 		LEFT JOIN authors a ON p.author_id = a.id ` + where + `
 		ORDER BY p.created_at DESC
-		LIMIT $4 OFFSET $5
+		LIMIT $7 OFFSET $8
 	`
 	args = append(args, pageSize, (page-1)*pageSize)
 
@@ -237,10 +237,10 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 		argIdx++
 	}
 	if keyword != "" {
-		where += fmt.Sprintf(" AND (p.title ILIKE $%d OR p.author ILIKE $%d)", argIdx, argIdx+1)
+		where += fmt.Sprintf(" AND (p.title ILIKE $%d OR p.author ILIKE $%d OR p.title_sc ILIKE $%d OR p.author_sc ILIKE $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3)
 		likePattern := "%" + keyword + "%"
-		args = append(args, likePattern, likePattern)
-		argIdx += 2
+		args = append(args, likePattern, likePattern, likePattern, likePattern)
+		argIdx += 4
 	}
 
 	countQuery := "SELECT COUNT(*) FROM poems p LEFT JOIN authors a ON p.author_id = a.id " + where
