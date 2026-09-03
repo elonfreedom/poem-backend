@@ -87,8 +87,9 @@ func (s *PoemService) GetByID(ctx context.Context, poemID int64, userID *string)
 }
 
 // Search 搜索诗歌（返回完整诗文数据，支持 PoemCard 渲染）
-func (s *PoemService) Search(ctx context.Context, keyword string, page, pageSize int) (*usermodel.SearchResponse, error) {
-	poems, total, err := s.poemRepo.Search(ctx, keyword, page, pageSize)
+// searchScope: "title" 只搜标题, "author" 只搜作者, 空或其他值搜全部
+func (s *PoemService) Search(ctx context.Context, keyword string, page, pageSize int, searchScope string) (*usermodel.SearchResponse, error) {
+	poems, total, err := s.poemRepo.Search(ctx, keyword, page, pageSize, searchScope)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("搜索诗歌失败: %v", err)}
 	}

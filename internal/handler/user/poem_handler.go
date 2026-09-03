@@ -84,7 +84,8 @@ func (h *PoemHandler) Search(c fuego.ContextNoBody) (*response.APIResponse[any],
 		perPage = 10
 	}
 
-	result, err := h.poemService.Search(c.Context(), keyword, page, perPage)
+	searchScope := c.QueryParam("search_scope")
+	result, err := h.poemService.Search(c.Context(), keyword, page, perPage, searchScope)
 	if err != nil {
 		return nil, err // 透传 Service 错误
 	}

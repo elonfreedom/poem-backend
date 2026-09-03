@@ -134,12 +134,28 @@ func (r *PoemRepository) GetByID(ctx context.Context, id int64) (*model.Poem, er
 }
 
 // Search 搜索诗歌（JOIN authors 表，以作者朝代为准）
-func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageSize int) ([]model.Poem, int64, error) {
-	where := `WHERE p.status = 'published' AND (p.title ILIKE $1 OR p.author ILIKE $2 OR p.content ILIKE $3 OR p.title_sc ILIKE $4 OR p.author_sc ILIKE $5 OR p.content_sc ILIKE $6)`
+// searchScope: "title" 只搜标题, "author" 只搜作者, 空或其他值搜全部
+func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageSize int, searchScope string) ([]model.Poem, int64, error) {
+	where := "WHERE p.status = 'published' AND ("
 	likePattern := "%" + keyword + "%"
-	args := []interface{}{likePattern, likePattern, likePattern, likePattern, likePattern, likePattern}
 
-	// 获取总数
+	if searchScope == "title" {
+		where += "p.title ILIKE $1 OR p.title_sc ILIKE $2"
+		args := []interface{}{likePattern, likePattern}
+		return r.searchExec(ctx, where+")", args, page, pageSize)
+	} else if searchScope == "author" {
+		where += "p.author ILIKE $1 OR p.author_sc ILIKE $2"
+		args := []interface{}{likePattern, likePattern}
+		return r.searchExec(ctx, where+")", args, page, pageSize)
+	}
+
+	where += "p.title ILIKE $1 OR p.author ILIKE $2 OR p.content ILIKE $3 OR p.title_sc ILIKE $4 OR p.author_sc ILIKE $5 OR p.content_sc ILIKE $6"
+	args := []interface{}{likePattern, likePattern, likePattern, likePattern, likePattern, likePattern}
+	return r.searchExec(ctx, where, args, page, pageSize)
+}
+
+// searchExec 执行搜索查询（复用 count + list 逻辑）
+func (r *PoemRepository) searchExec(ctx context.Context, where string, args []interface{}, page, pageSize int) ([]model.Poem, int64, error) {
 	countQuery := "SELECT COUNT(*) FROM poems p LEFT JOIN authors a ON p.author_id = a.id " + where
 	var total int64
 	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total)
@@ -147,15 +163,15 @@ func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageS
 		return nil, 0, err
 	}
 
-	// 获取列表
-	query := `
+	argIdx := len(args) + 1
+	query := fmt.Sprintf(`
 		SELECT p.id, p.title, p.author, COALESCE(a.dynasty, p.dynasty) AS dynasty, p.content, p.translation, p.appreciation, p.source, p.category_id, p.tags, p.cover_url, p.status, p.created_by, p.created_at, p.updated_at,
 		       p.title_pinyin, p.content_pinyin, p.title_sc, p.author_sc, p.content_sc, p.translation_sc, p.appreciation_sc, p.author_id
 		FROM poems p
-		LEFT JOIN authors a ON p.author_id = a.id ` + where + `
+		LEFT JOIN authors a ON p.author_id = a.id %s
 		ORDER BY p.created_at DESC
-		LIMIT $7 OFFSET $8
-	`
+		LIMIT $%d OFFSET $%d
+	`, where, argIdx, argIdx+1)
 	args = append(args, pageSize, (page-1)*pageSize)
 
 	rows, err := r.db.Query(ctx, query, args...)
