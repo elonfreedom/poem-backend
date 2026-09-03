@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -134,24 +136,29 @@ func (r *PoemRepository) GetByID(ctx context.Context, id int64) (*model.Poem, er
 }
 
 // Search 搜索诗歌（JOIN authors 表，以作者朝代为准）
-// searchScope: "title" 只搜标题, "author" 只搜作者, 空或其他值搜全部
+// searchScope: "title" 只搜标题, "author" 只搜作者, "content" 只搜内容, 空/"all" 搜全部
 func (r *PoemRepository) Search(ctx context.Context, keyword string, page, pageSize int, searchScope string) ([]model.Poem, int64, error) {
 	where := "WHERE p.status = 'published' AND ("
 	likePattern := "%" + keyword + "%"
 
-	if searchScope == "title" {
+	switch searchScope {
+	case "title":
 		where += "p.title ILIKE $1 OR p.title_sc ILIKE $2"
 		args := []interface{}{likePattern, likePattern}
 		return r.searchExec(ctx, where+")", args, page, pageSize)
-	} else if searchScope == "author" {
+	case "author":
 		where += "p.author ILIKE $1 OR p.author_sc ILIKE $2"
 		args := []interface{}{likePattern, likePattern}
 		return r.searchExec(ctx, where+")", args, page, pageSize)
+	case "content":
+		where += "p.content ILIKE $1 OR p.content_sc ILIKE $2"
+		args := []interface{}{likePattern, likePattern}
+		return r.searchExec(ctx, where+")", args, page, pageSize)
+	default: // "" 或 "all"：搜全部
+		where += "p.title ILIKE $1 OR p.author ILIKE $2 OR p.content ILIKE $3 OR p.title_sc ILIKE $4 OR p.author_sc ILIKE $5 OR p.content_sc ILIKE $6)"
+		args := []interface{}{likePattern, likePattern, likePattern, likePattern, likePattern, likePattern}
+		return r.searchExec(ctx, where, args, page, pageSize)
 	}
-
-	where += "p.title ILIKE $1 OR p.author ILIKE $2 OR p.content ILIKE $3 OR p.title_sc ILIKE $4 OR p.author_sc ILIKE $5 OR p.content_sc ILIKE $6"
-	args := []interface{}{likePattern, likePattern, likePattern, likePattern, likePattern, likePattern}
-	return r.searchExec(ctx, where, args, page, pageSize)
 }
 
 // searchExec 执行搜索查询（复用 count + list 逻辑）
@@ -372,4 +379,223 @@ func (r *PoemRepository) IsFavorited(ctx context.Context, userID string, poemID 
 	var exists bool
 	err := r.db.QueryRow(ctx, query, userID, poemID).Scan(&exists)
 	return exists, err
+}
+
+// DedupPoem 去重扫描用的诗文信息（包含分类名称）
+type DedupPoem struct {
+	ID           int64
+	Title        string
+	TitleSC      string
+	Author       string
+	AuthorSC     string
+	Dynasty      string
+	Content      string
+	ContentSC    string
+	Translation  string
+	Appreciation string
+	CategoryID   *int64
+	CategoryName *string
+	Tags         []string
+	Status       string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// DedupGroupSummary 重复组摘要（SQL 分组结果）
+type DedupGroupSummary struct {
+	MatchKey    string // 匹配键（用于分组）
+	Title       string // 组内任意一个标题（用于展示）
+	Author      string // 组内任意一个作者（用于展示）
+	PoemCount   int64  // 组内诗文数量
+	PoemIDs     []int64 // 组内所有诗文 ID
+}
+
+// DedupScanResult 去重扫描结果
+type DedupScanResult struct {
+	TotalScanned   int64
+	TotalGroups    int64
+	TotalDuplicates int64
+	Groups         []DedupGroupSummary
+}
+
+// ScanDedupGroups SQL 分组查询重复诗文（分页返回组摘要，不加载全部诗文详情）
+func (r *PoemRepository) ScanDedupGroups(ctx context.Context, matchFields []string, statusFilter, dynastyFilter string, page, pageSize int) (*DedupScanResult, error) {
+	// 构建 GROUP BY 字段（使用简体字段比较，忽略繁简差异）
+	groupFields := make([]string, 0, len(matchFields))
+	for _, f := range matchFields {
+		switch f {
+		case "title":
+			groupFields = append(groupFields, "p.title_sc")
+		case "author":
+			groupFields = append(groupFields, "p.author_sc")
+		case "content":
+			// 内容用 MD5 hash 比较（忽略标点和空格差异在 SQL 中较复杂，这里用标准化后的 hash）
+			groupFields = append(groupFields, "md5(lower(regexp_replace(p.content_sc, '[[:punct:][:space:]]', '', 'g')))")
+		}
+	}
+	groupBy := strings.Join(groupFields, ", ")
+
+	// 构建 WHERE 条件
+	where := "WHERE 1=1"
+	args := []interface{}{}
+	argIdx := 1
+
+	if statusFilter != "" {
+		where += fmt.Sprintf(" AND p.status = $%d", argIdx)
+		args = append(args, statusFilter)
+		argIdx++
+	}
+	if dynastyFilter != "" {
+		where += fmt.Sprintf(" AND COALESCE(a.dynasty, p.dynasty) = $%d", argIdx)
+		args = append(args, dynastyFilter)
+		argIdx++
+	}
+
+	// 子查询：按 matchFields 分组，筛选 count > 1 的组
+	subQuery := fmt.Sprintf(`
+		SELECT %s, COUNT(*) AS cnt, ARRAY_AGG(p.id ORDER BY p.created_at ASC) AS ids,
+		       MIN(p.title) AS title, MIN(p.author) AS author
+		FROM poems p
+		LEFT JOIN authors a ON p.author_id = a.id
+		%s
+		GROUP BY %s
+		HAVING COUNT(*) > 1
+	`, groupBy, where, groupBy)
+
+	// 统计总数
+	countQuery := fmt.Sprintf(`
+		WITH groups AS (%s)
+		SELECT COUNT(*) AS total_groups, COALESCE(SUM(cnt), 0) AS total_poems, COALESCE(SUM(cnt - 1), 0) AS total_duplicates
+		FROM groups
+	`, subQuery)
+
+	var totalGroups, totalPoems, totalDuplicates int64
+	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&totalGroups, &totalPoems, &totalDuplicates)
+	if err != nil {
+		return nil, fmt.Errorf("统计重复组失败: %w", err)
+	}
+
+	// 分页查询组列表
+	offset := (page - 1) * pageSize
+	pageQuery := fmt.Sprintf(`
+		WITH groups AS (%s)
+		SELECT title, author, cnt, ids
+		FROM groups
+		ORDER BY cnt DESC, title ASC
+		LIMIT $%d OFFSET $%d
+	`, subQuery, argIdx, argIdx+1)
+	args = append(args, pageSize, offset)
+
+	rows, err := r.db.Query(ctx, pageQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("查询重复组失败: %w", err)
+	}
+	defer rows.Close()
+
+	groups := make([]DedupGroupSummary, 0)
+	for rows.Next() {
+		var g DedupGroupSummary
+		err := rows.Scan(&g.Title, &g.Author, &g.PoemCount, &g.PoemIDs)
+		if err != nil {
+			return nil, fmt.Errorf("扫描重复组行失败: %w", err)
+		}
+		g.MatchKey = buildMatchKey(g.Title, g.Author)
+		groups = append(groups, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// 计算扫描总数（所有符合筛选条件的诗文）
+	totalScannedQuery := fmt.Sprintf(`
+		SELECT COUNT(*) FROM poems p
+		LEFT JOIN authors a ON p.author_id = a.id
+		%s
+	`, where)
+	// 去掉分页参数重新查
+	scanArgs := args[:len(args)-2]
+	var totalScanned int64
+	err = r.db.QueryRow(ctx, totalScannedQuery, scanArgs...).Scan(&totalScanned)
+	if err != nil {
+		return nil, fmt.Errorf("统计扫描总数失败: %w", err)
+	}
+
+	return &DedupScanResult{
+		TotalScanned:    totalScanned,
+		TotalGroups:     totalGroups,
+		TotalDuplicates: totalDuplicates,
+		Groups:          groups,
+	}, nil
+}
+
+// FetchPoemsByIDs 根据 ID 列表批量获取诗文详情
+func (r *PoemRepository) FetchPoemsByIDs(ctx context.Context, ids []int64) ([]DedupPoem, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	query := `
+		SELECT p.id, p.title, p.title_sc, p.author, p.author_sc,
+		       COALESCE(a.dynasty, p.dynasty) AS dynasty,
+		       p.content, p.content_sc, p.translation, p.appreciation,
+		       p.category_id, c.name AS category_name, p.tags, p.status,
+		       p.created_at, p.updated_at
+		FROM poems p
+		LEFT JOIN authors a ON p.author_id = a.id
+		LEFT JOIN categories c ON p.category_id = c.id
+		WHERE p.id = ANY($1)
+		ORDER BY p.created_at ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	poems := make([]DedupPoem, 0, len(ids))
+	for rows.Next() {
+		var p DedupPoem
+		err := rows.Scan(
+			&p.ID, &p.Title, &p.TitleSC, &p.Author, &p.AuthorSC,
+			&p.Dynasty, &p.Content, &p.ContentSC, &p.Translation, &p.Appreciation,
+			&p.CategoryID, &p.CategoryName, &p.Tags, &p.Status,
+			&p.CreatedAt, &p.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		poems = append(poems, p)
+	}
+	return poems, rows.Err()
+}
+
+// buildMatchKey 构建匹配键（用于前端展示）
+func buildMatchKey(title, author string) string {
+	title = strings.TrimSpace(title)
+	author = strings.TrimSpace(author)
+	if title != "" && author != "" {
+		return title + " - " + author
+	}
+	if title != "" {
+		return title
+	}
+	return author
+}
+
+// ArchivePoems 批量归档诗文（status 改为 archived）
+func (r *PoemRepository) ArchivePoems(ctx context.Context, ids []int64) (int64, error) {
+	return r.BatchUpdateStatus(ctx, ids, "archived")
+}
+
+// DeletePoems 批量删除诗文
+func (r *PoemRepository) DeletePoems(ctx context.Context, ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result, err := r.db.Exec(ctx, "DELETE FROM poems WHERE id = ANY($1)", ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

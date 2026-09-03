@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"fmt"
+
 	"github.com/go-fuego/fuego"
 
 	adminmodel "poem-backend/internal/model/admin"
@@ -99,6 +101,39 @@ func (h *ToolsHandler) BatchConvertChars(c fuego.ContextWithBody[adminmodel.Admi
 	}
 
 	result, err := h.poemService.BatchConvertChars(c.Context(), body.PoetryIDs, body.Target)
+	if err != nil {
+		return nil, err // 透传 Service 错误
+	}
+
+	return response.OK(*result), nil
+}
+
+// ==================== 诗文去重工具 ====================
+
+// DedupScan 扫描重复诗文组（分页返回）
+// 根据 match_fields 组合对诗文分组，找出重复项，分页返回组摘要 + 组内诗文详情
+func (h *ToolsHandler) DedupScan(c fuego.ContextWithBody[adminmodel.AdminToolDedupScanRequest]) (*response.APIResponse[adminmodel.AdminToolDedupScanResponse], error) {
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid_request", Detail: fmt.Sprintf("请求体解析失败: %v", err)}
+	}
+
+	result, err := h.poemService.DedupScan(c.Context(), body.MatchFields, body.StatusFilter, body.DynastyFilter, body.Page, body.PageSize)
+	if err != nil {
+		return nil, err // 透传 Service 错误
+	}
+
+	return response.OK(*result), nil
+}
+
+// DedupExecute 执行去重（归档 + 删除）
+func (h *ToolsHandler) DedupExecute(c fuego.ContextWithBody[adminmodel.AdminToolDedupExecuteRequest]) (*response.APIResponse[adminmodel.AdminToolDedupExecuteResponse], error) {
+	body, err := c.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "invalid body", Detail: err.Error()}
+	}
+
+	result, err := h.poemService.DedupExecute(c.Context(), body.ArchiveIDs, body.DeleteIDs)
 	if err != nil {
 		return nil, err // 透传 Service 错误
 	}

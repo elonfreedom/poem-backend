@@ -84,7 +84,11 @@ func (h *PoemHandler) Search(c fuego.ContextNoBody) (*response.APIResponse[any],
 		perPage = 10
 	}
 
+	// 兼容前端 mode 参数（mode=all/title/author/content），fallback 到 search_scope
 	searchScope := c.QueryParam("search_scope")
+	if searchScope == "" {
+		searchScope = c.QueryParam("mode")
+	}
 	result, err := h.poemService.Search(c.Context(), keyword, page, perPage, searchScope)
 	if err != nil {
 		return nil, err // 透传 Service 错误

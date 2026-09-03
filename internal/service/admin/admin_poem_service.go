@@ -2,8 +2,11 @@ package admin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -310,6 +313,183 @@ func toAdminPoemResponse(p model.Poem, categoryName *string) adminmodel.AdminPoe
 	}
 	if categoryName != nil {
 		resp.CategoryName = *categoryName
+	}
+	return resp
+}
+
+// ==================== 诗文去重工具 ====================
+
+// DedupScan 扫描重复诗文组（SQL 分组 + 分页，按需加载诗文详情）
+// matchFields: 匹配维度数组，所有条件都满足（AND 逻辑）才视为重复
+func (s *AdminPoemService) DedupScan(ctx context.Context, matchFields []string, statusFilter, dynastyFilter string, page, pageSize int) (*adminmodel.AdminToolDedupScanResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 50 {
+		pageSize = 20
+	}
+
+	// SQL 分组 + 分页，只返回组摘要（不加载全部诗文详情）
+	scanResult, err := s.poemRepo.ScanDedupGroups(ctx, matchFields, statusFilter, dynastyFilter, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	// 构建 matchReason
+	matchReason := buildMatchReason(matchFields)
+
+	// 对每个组，按需加载诗文详情
+	groups := make([]adminmodel.AdminToolDedupGroup, 0, len(scanResult.Groups))
+	for _, summary := range scanResult.Groups {
+		// 按需加载当前组的诗文详情
+		poems, err := s.poemRepo.FetchPoemsByIDs(ctx, summary.PoemIDs)
+		if err != nil {
+			return nil, err
+		}
+
+		// 排序：推荐保留的排最前
+		sortDedupPoems(poems)
+
+		dedupPoems := make([]adminmodel.AdminToolDedupPoem, 0, len(poems))
+		for _, p := range poems {
+			dedupPoems = append(dedupPoems, toDedupPoem(p))
+		}
+
+		groups = append(groups, adminmodel.AdminToolDedupGroup{
+			GroupID:           fmt.Sprintf("%x", sha256String(summary.MatchKey))[:8],
+			MatchReason:       matchReason,
+			MatchKey:          summary.MatchKey,
+			PoemCount:         summary.PoemCount,
+			Poems:             dedupPoems,
+			RecommendedKeepID: poems[0].ID, // 排序后第一个是推荐保留的
+		})
+	}
+
+	return &adminmodel.AdminToolDedupScanResponse{
+		TotalScanned:    int(scanResult.TotalScanned),
+		TotalGroups:     int(scanResult.TotalGroups),
+		TotalDuplicates: int(scanResult.TotalDuplicates),
+		Page:            page,
+		PageSize:        pageSize,
+		Groups:          groups,
+	}, nil
+}
+
+// DedupExecute 执行去重（归档 + 删除）
+func (s *AdminPoemService) DedupExecute(ctx context.Context, archiveIDs, deleteIDs []int64) (*adminmodel.AdminToolDedupExecuteResponse, error) {
+	result := &adminmodel.AdminToolDedupExecuteResponse{}
+
+	// 归档
+	if len(archiveIDs) > 0 {
+		archived, err := s.poemRepo.ArchivePoems(ctx, archiveIDs)
+		if err != nil {
+			return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("归档失败: %v", err)}
+		}
+		result.Archived = int(archived)
+	}
+
+	// 删除
+	if len(deleteIDs) > 0 {
+		deleted, err := s.poemRepo.DeletePoems(ctx, deleteIDs)
+		if err != nil {
+			return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("删除失败: %v", err)}
+		}
+		result.Deleted = int(deleted)
+	}
+
+	result.Message = fmt.Sprintf("处理完成：归档 %d 首，删除 %d 首", result.Archived, result.Deleted)
+	return result, nil
+}
+
+// buildMatchReason 构建匹配原因描述
+func buildMatchReason(matchFields []string) string {
+	parts := make([]string, 0, len(matchFields))
+	for _, f := range matchFields {
+		switch f {
+		case "title":
+			parts = append(parts, "标题")
+		case "author":
+			parts = append(parts, "作者")
+		case "content":
+			parts = append(parts, "内容")
+		}
+	}
+	return strings.Join(parts, "+") + "相同"
+}
+
+// sha256String 计算字符串的 SHA256 hash
+func sha256String(s string) string {
+	hash := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(hash[:])
+}
+
+// sortDedupPoems 排序：推荐保留的排最前
+// 1. 优先保留 published > draft > archived
+// 2. 同状态下，数据更完整的优先（有 translation / appreciation / category / tags）
+// 3. 仍相同，保留创建时间最早的
+func sortDedupPoems(poems []repository.DedupPoem) {
+	statusOrder := map[string]int{"published": 0, "draft": 1, "archived": 2}
+
+	sort.SliceStable(poems, func(i, j int) bool {
+		pi, pj := poems[i], poems[j]
+
+		// 1. 状态优先级
+		si, sj := statusOrder[pi.Status], statusOrder[pj.Status]
+		if si != sj {
+			return si < sj
+		}
+
+		// 2. 数据完整度（分数越高越优先）
+		scoreI := completenessScore(pi)
+		scoreJ := completenessScore(pj)
+		if scoreI != scoreJ {
+			return scoreI > scoreJ
+		}
+
+		// 3. 创建时间最早的优先
+		return pi.CreatedAt.Before(pj.CreatedAt)
+	})
+}
+
+// completenessScore 计算诗文数据完整度分数
+func completenessScore(p repository.DedupPoem) int {
+	score := 0
+	if p.Translation != "" {
+		score += 2
+	}
+	if p.Appreciation != "" {
+		score += 2
+	}
+	if p.CategoryID != nil {
+		score += 1
+	}
+	if len(p.Tags) > 0 {
+		score += 1
+	}
+	return score
+}
+
+// toDedupPoem 转换 DedupPoem 为 AdminToolDedupPoem
+func toDedupPoem(p repository.DedupPoem) adminmodel.AdminToolDedupPoem {
+	resp := adminmodel.AdminToolDedupPoem{
+		ID:           p.ID,
+		Title:        p.Title,
+		TitleSC:      p.TitleSC,
+		Author:       p.Author,
+		AuthorSC:     p.AuthorSC,
+		Dynasty:      p.Dynasty,
+		Content:      p.Content,
+		ContentSC:    p.ContentSC,
+		Translation:  p.Translation,
+		Appreciation: p.Appreciation,
+		CategoryID:   p.CategoryID,
+		Tags:         p.Tags,
+		Status:       p.Status,
+		CreatedAt:    p.CreatedAt,
+		UpdatedAt:    p.UpdatedAt,
+	}
+	if p.CategoryName != nil {
+		resp.CategoryName = *p.CategoryName
 	}
 	return resp
 }

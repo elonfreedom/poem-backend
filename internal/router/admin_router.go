@@ -376,4 +376,16 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionOverrideDescription("批量转换指定诗歌的字符类型（简体/繁体）"),
 		fuego.OptionTags("工具模块"),
 	)
+
+	// [工具模块] 诗文去重
+	fuego.Post(adminMgmt, "/tools/dedup/scan", toolsHandler.DedupScan,
+		fuego.OptionSummary("扫描重复诗文"),
+		fuego.OptionOverrideDescription("按指定维度（标题/作者/内容）扫描重复诗文，返回重复组和推荐保留策略"),
+		fuego.OptionTags("工具模块"),
+	)
+	fuego.Post(adminMgmt, "/tools/dedup/execute", toolsHandler.DedupExecute,
+		fuego.OptionOverrideDescription("执行去重：归档指定 ID 的诗文（status→archived），硬删除指定 ID 的诗文"),
+		fuego.OptionSummary("执行去重"),
+		fuego.OptionTags("工具模块"),
+	)
 }

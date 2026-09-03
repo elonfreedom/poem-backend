@@ -415,3 +415,67 @@ type AdminToolBatchConvertCharsResponse struct {
 	Converted int    `json:"converted" description:"成功转换的诗歌数"`
 	Message   string `json:"message" description:"处理结果描述"`
 }
+
+// ========== 诗文去重工具 ==========
+
+// AdminToolDedupScanRequest 扫描重复组请求
+type AdminToolDedupScanRequest struct {
+	MatchFields   []string `json:"match_fields" validate:"required,min=1,dive,oneof=title author content" description:"匹配维度 title/author/content"`
+	StatusFilter  string   `json:"status_filter,omitempty" description:"按状态筛选 published/draft/archived"`
+	DynastyFilter string   `json:"dynasty_filter,omitempty" description:"按朝代筛选 如 唐"`
+	Page          int      `json:"page" description:"页码 默认1"`
+	PageSize      int      `json:"page_size" description:"每页组数 默认20 最大50"`
+}
+
+// AdminToolDedupScanResponse 扫描重复组响应
+type AdminToolDedupScanResponse struct {
+	TotalScanned    int                   `json:"total_scanned" description:"扫描的诗文总数"`
+	TotalGroups     int                   `json:"total_groups" description:"重复组总数"`
+	TotalDuplicates int                   `json:"total_duplicates" description:"重复诗文总数（不含每组保留的 1 首）"`
+	Page            int                   `json:"page" description:"当前页码"`
+	PageSize        int                   `json:"page_size" description:"每页组数"`
+	Groups          []AdminToolDedupGroup `json:"groups" description:"当前页重复组列表"`
+}
+
+// AdminToolDedupGroup 重复组
+type AdminToolDedupGroup struct {
+	GroupID           string               `json:"group_id" description:"组标识（hash）"`
+	MatchReason       string               `json:"match_reason" description:"匹配原因（如：标题+作者相同）"`
+	MatchKey          string               `json:"match_key" description:"匹配键（如：静夜思 - 李白）"`
+	PoemCount         int64                `json:"poem_count" description:"组内诗文数量"`
+	Poems             []AdminToolDedupPoem `json:"poems" description:"组内诗文列表"`
+	RecommendedKeepID int64                `json:"recommended_keep_id" description:"推荐保留的诗文 ID"`
+}
+
+// AdminToolDedupPoem 去重工具中的诗文信息
+type AdminToolDedupPoem struct {
+	ID           int64     `json:"id" description:"诗歌ID"`
+	Title        string    `json:"title" description:"标题"`
+	TitleSC      string    `json:"title_sc" description:"标题（简体）"`
+	Author       string    `json:"author" description:"作者"`
+	AuthorSC     string    `json:"author_sc" description:"作者（简体）"`
+	Dynasty      string    `json:"dynasty" description:"朝代"`
+	Content      string    `json:"content" description:"内容"`
+	ContentSC    string    `json:"content_sc" description:"内容（简体）"`
+	Translation  string    `json:"translation" description:"译文"`
+	Appreciation string    `json:"appreciation" description:"赏析"`
+	CategoryID   *int64    `json:"category_id,omitempty" description:"分类ID"`
+	CategoryName string    `json:"category_name,omitempty" description:"分类名称"`
+	Tags         []string  `json:"tags" description:"标签列表"`
+	Status       string    `json:"status" description:"状态"`
+	CreatedAt    time.Time `json:"created_at" description:"创建时间"`
+	UpdatedAt    time.Time `json:"updated_at" description:"更新时间"`
+}
+
+// AdminToolDedupExecuteRequest 执行去重请求
+type AdminToolDedupExecuteRequest struct {
+	ArchiveIDs []int64 `json:"archive_ids" description:"需要归档的诗文 ID 数组"`
+	DeleteIDs  []int64 `json:"delete_ids" description:"需要删除的诗文 ID 数组"`
+}
+
+// AdminToolDedupExecuteResponse 执行去重响应
+type AdminToolDedupExecuteResponse struct {
+	Archived int    `json:"archived" description:"归档数量"`
+	Deleted  int    `json:"deleted" description:"删除数量"`
+	Message  string `json:"message" description:"处理结果描述"`
+}

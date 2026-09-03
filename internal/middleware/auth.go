@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"log"
 )
 
 type contextKey string
@@ -56,18 +57,21 @@ func AuthMiddleware(secret string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
+				log.Printf("[Auth] Missing Authorization header, path: %s", r.URL.Path)
 				http.Error(w, `{"code":401,"message":"missing authorization header"}`, http.StatusUnauthorized)
 				return
 			}
 
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || parts[0] != "Bearer" {
+				log.Printf("[Auth] Invalid Authorization format, path: %s, header prefix: %s", r.URL.Path, truncateToken(authHeader))
 				http.Error(w, `{"code":401,"message":"invalid authorization format"}`, http.StatusUnauthorized)
 				return
 			}
 
 			claims, err := ParseToken(parts[1], secret)
 			if err != nil {
+				log.Printf("[Auth] Token parse error: %v, path: %s, token prefix: %s", err, r.URL.Path, truncateToken(parts[1]))
 				http.Error(w, `{"code":401,"message":"invalid token"}`, http.StatusUnauthorized)
 				return
 			}
@@ -127,4 +131,12 @@ func GetUserRoleFromContext(ctx context.Context) string {
 		return role
 	}
 	return ""
+}
+
+// truncateToken 截断 token 用于安全日志输出（只显示前 10 个字符）
+func truncateToken(token string) string {
+	if len(token) <= 10 {
+		return token
+	}
+	return token[:10]
 }
