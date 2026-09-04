@@ -23,8 +23,8 @@ func NewAdminAuthorService(authorRepo *repository.AuthorRepository) *AdminAuthor
 	return &AdminAuthorService{authorRepo: authorRepo}
 }
 
-// List 分页获取作者列表
-func (s *AdminAuthorService) List(ctx context.Context, page, pageSize int, keyword string) (*response.PageData[adminmodel.AdminAuthorResponse], error) {
+// List 分页获取作者列表（支持排序）
+func (s *AdminAuthorService) List(ctx context.Context, page, pageSize int, keyword, sortField, sortOrder string) (*response.PageData[adminmodel.AdminAuthorResponse], error) {
 	if page < 1 {
 		page = 1
 	}
@@ -32,15 +32,14 @@ func (s *AdminAuthorService) List(ctx context.Context, page, pageSize int, keywo
 		pageSize = 20
 	}
 
-	authors, total, err := s.authorRepo.List(ctx, page, pageSize, keyword)
+	authors, total, err := s.authorRepo.List(ctx, page, pageSize, keyword, sortField, sortOrder)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询作者列表失败: %v", err)}
 	}
 
 	items := make([]adminmodel.AdminAuthorResponse, 0, len(authors))
 	for _, a := range authors {
-		poemCount, _ := s.authorRepo.GetPoemCount(ctx, a.ID)
-		items = append(items, toAdminAuthorResponse(a, poemCount))
+		items = append(items, toAdminAuthorResponse(a, a.PoemCount))
 	}
 	return &response.PageData[adminmodel.AdminAuthorResponse]{Items: items, Total: total}, nil
 }
@@ -183,6 +182,15 @@ func (s *AdminAuthorService) CleanupAuthorNames(ctx context.Context) (int64, str
 		return 0, "", fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("清理作者繁体名失败: %v", err)}
 	}
 	return cleaned, fmt.Sprintf("清理完成：已将 %d 个作者的繁体名清空（与简体相同）", cleaned), nil
+}
+
+// ConvertAuthorNamesToTraditional 将作者姓名从简体转为繁体
+func (s *AdminAuthorService) ConvertAuthorNamesToTraditional(ctx context.Context) (int64, string, error) {
+	processed, err := s.authorRepo.ConvertAuthorNamesToTraditional(ctx)
+	if err != nil {
+		return 0, "", fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("作者姓名转繁体失败: %v", err)}
+	}
+	return processed, fmt.Sprintf("转换完成：已处理 %d 个作者", processed), nil
 }
 
 // EnsureAuthorNamesSimplified 确保 authors 表的 name 字段为简体字

@@ -419,4 +419,11 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionOverrideDescription("将 name 中的繁体字转为简体，原值保留到 name_traditional"),
 		fuego.OptionTags("工具模块"),
 	)
+
+	// [工具模块] 作者姓名转繁体
+	fuego.Post(adminMgmt, "/tools/convert-author-names-traditional", toolsHandler.ConvertAuthorNamesTraditional,
+		fuego.OptionSummary("作者姓名转繁体"),
+		fuego.OptionOverrideDescription("将 name 字段（简体）转为繁体，写入 name_traditional 字段（已有值则覆盖）"),
+		fuego.OptionTags("工具模块"),
+	)
 }

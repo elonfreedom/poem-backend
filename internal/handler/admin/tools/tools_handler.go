@@ -227,3 +227,23 @@ func (h *ToolsHandler) EnsureAuthorNamesSimplified(c fuego.ContextNoBody) (*resp
 		Message:   message,
 	}), nil
 }
+
+// ==================== 作者姓名转繁体工具 ====================
+
+// ConvertAuthorNamesTraditionalResponse 作者姓名转繁体响应
+type ConvertAuthorNamesTraditionalResponse struct {
+	Processed int64  `json:"processed" description:"处理的记录数"`
+	Message   string `json:"message" description:"处理结果描述"`
+}
+
+// ConvertAuthorNamesTraditional 将作者姓名从简体转为繁体，写入 name_traditional
+func (h *ToolsHandler) ConvertAuthorNamesTraditional(c fuego.ContextNoBody) (*response.APIResponse[ConvertAuthorNamesTraditionalResponse], error) {
+	processed, message, err := h.authorService.ConvertAuthorNamesToTraditional(c.Context())
+	if err != nil {
+		return nil, err
+	}
+	return response.OK(ConvertAuthorNamesTraditionalResponse{
+		Processed: processed,
+		Message:   message,
+	}), nil
+}

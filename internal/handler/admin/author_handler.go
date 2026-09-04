@@ -18,7 +18,7 @@ func NewAuthorHandler(authorService *admin.AdminAuthorService) *AuthorHandler {
 	return &AuthorHandler{authorService: authorService}
 }
 
-// List 获取作者列表
+// List 获取作者列表（支持排序）
 func (h *AuthorHandler) List(c fuego.ContextNoBody) (*response.APIResponse[response.PageData[adminmodel.AdminAuthorResponse]], error) {
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	if page < 1 {
@@ -29,8 +29,10 @@ func (h *AuthorHandler) List(c fuego.ContextNoBody) (*response.APIResponse[respo
 		pageSize = 20
 	}
 	keyword := c.QueryParam("keyword")
+	sortField := c.QueryParam("sort_field")
+	sortOrder := c.QueryParam("sort_order")
 
-	result, err := h.authorService.List(c.Context(), page, pageSize, keyword)
+	result, err := h.authorService.List(c.Context(), page, pageSize, keyword, sortField, sortOrder)
 	if err != nil {
 		return nil, err // 透传 Service 错误
 	}

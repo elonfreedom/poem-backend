@@ -21,8 +21,8 @@ func NewAuthorRepository(db *pgxpool.Pool) *AuthorRepository {
 	return &AuthorRepository{db: db}
 }
 
-// List 分页获取作者列表
-func (r *AuthorRepository) List(ctx context.Context, page, pageSize int, keyword string) ([]model.Author, int64, error) {
+// List 分页获取作者列表（支持排序）
+func (r *AuthorRepository) List(ctx context.Context, page, pageSize int, keyword, sortField, sortOrder string) ([]model.Author, int64, error) {
 	where := "WHERE 1=1"
 	args := []interface{}{}
 	argIdx := 1
@@ -41,6 +41,9 @@ func (r *AuthorRepository) List(ctx context.Context, page, pageSize int, keyword
 		return nil, 0, fmt.Errorf("count authors failed: %w", err)
 	}
 
+	// 构建 ORDER BY
+	orderBy := buildAuthorOrderBy(sortField, sortOrder)
+
 	// 获取列表（LEFT JOIN 统计诗歌数量）
 	query := fmt.Sprintf(`
 		SELECT a.id, a.name, a.name_traditional, a.dynasty, a.biography, a.created_at, a.updated_at, COUNT(p.id) AS poem_count
@@ -48,9 +51,9 @@ func (r *AuthorRepository) List(ctx context.Context, page, pageSize int, keyword
 		LEFT JOIN poems p ON p.author_id = a.id
 		%s
 		GROUP BY a.id
-		ORDER BY a.id DESC
+		%s
 		LIMIT $%d OFFSET $%d
-	`, where, argIdx, argIdx+1)
+	`, where, orderBy, argIdx, argIdx+1)
 	args = append(args, pageSize, (page-1)*pageSize)
 
 	rows, err := r.db.Query(ctx, query, args...)
@@ -554,6 +557,68 @@ func (r *AuthorRepository) CleanupAuthorNames(ctx context.Context) (int64, error
 		return 0, fmt.Errorf("cleanup author names failed: %w", err)
 	}
 	return tag.RowsAffected(), nil
+}
+
+// buildAuthorOrderBy 构建作者列表排序子句
+func buildAuthorOrderBy(sortField, sortOrder string) string {
+	// 白名单允许的排序字段
+	var column string
+	switch sortField {
+	case "name":
+		column = "a.name"
+	case "poem_count":
+		column = "poem_count"
+	case "created_at":
+		column = "a.created_at"
+	case "id":
+		column = "a.id"
+	default:
+		column = "a.id" // 默认按 id
+	}
+
+	// 排序方向
+	direction := "DESC"
+	if sortOrder == "asc" {
+		direction = "ASC"
+	}
+
+	return fmt.Sprintf("ORDER BY %s %s", column, direction)
+}
+
+// ConvertAuthorNamesToTraditional 将作者姓名从简体转为繁体，写入 name_traditional 字段
+func (r *AuthorRepository) ConvertAuthorNamesToTraditional(ctx context.Context) (int64, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, name FROM authors
+		WHERE name != ''
+		ORDER BY id
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("query authors failed: %w", err)
+	}
+	defer rows.Close()
+
+	var processed int64
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return processed, fmt.Errorf("scan author failed: %w", err)
+		}
+
+		traditional := convert.MustSimplifiedToTraditional(name)
+		if traditional == name {
+			continue // 转换后无变化，跳过
+		}
+
+		if _, err := r.db.Exec(ctx, `
+			UPDATE authors SET name_traditional = $1, updated_at = NOW()
+			WHERE id = $2
+		`, traditional, id); err != nil {
+			return processed, fmt.Errorf("update author %d failed: %w", id, err)
+		}
+		processed++
+	}
+	return processed, rows.Err()
 }
 
 // EnsureAuthorNamesSimplified 确保 authors 表的 name 字段为简体字
