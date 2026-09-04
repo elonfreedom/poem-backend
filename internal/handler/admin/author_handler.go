@@ -24,7 +24,7 @@ func (h *AuthorHandler) List(c fuego.ContextNoBody) (*response.APIResponse[respo
 	if page < 1 {
 		page = 1
 	}
-	pageSize, _ := strconv.Atoi(c.QueryParam("pageSize"))
+	pageSize, _ := strconv.Atoi(c.QueryParam("page_size"))
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
 	}

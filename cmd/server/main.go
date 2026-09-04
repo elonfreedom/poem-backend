@@ -34,6 +34,7 @@ func vbenErrorSerializer(w http.ResponseWriter, r *http.Request, err error) {
 
 	code := CodeBadRequest
 	message := err.Error()
+	detail := ""
 
 	// 提取 Fuego HTTPError 的状态码和标题
 	type httpError interface {
@@ -45,6 +46,14 @@ func vbenErrorSerializer(w http.ResponseWriter, r *http.Request, err error) {
 		message = he.ErrorTitle()
 	}
 
+	// 提取详细错误信息
+	type detailError interface {
+		DetailMsg() string
+	}
+	if de, ok := err.(detailError); ok {
+		detail = de.DetailMsg()
+	}
+
 	// 限制在已知错误码范围内
 	switch code {
 	case CodeBadRequest, CodeUnauthorized, CodeForbidden, CodeNotFound, CodeInternalError:
@@ -53,10 +62,16 @@ func vbenErrorSerializer(w http.ResponseWriter, r *http.Request, err error) {
 		code = CodeInternalError
 	}
 
+	// 如果有详细错误信息，使用 detail 作为 error 字段
+	errorMsg := message
+	if detail != "" {
+		errorMsg = detail
+	}
+
 	_ = json.NewEncoder(w).Encode(response.APIResponse[any]{
 		Code:    code,
 		Message: message,
-		Error:   message,
+		Error:   errorMsg,
 	})
 }
 

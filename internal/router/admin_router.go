@@ -388,4 +388,35 @@ func SetupAdminRoutes(server *fuego.Server, db *pgxpool.Pool, cfg *config.Config
 		fuego.OptionSummary("执行去重"),
 		fuego.OptionTags("工具模块"),
 	)
+	fuego.Post(adminMgmt, "/tools/dedup/merge", toolsHandler.DedupMerge,
+		fuego.OptionSummary("合并重复诗文"),
+		fuego.OptionOverrideDescription("智能合并重复诗文：将 merge_ids 中的诗文数据合并到 keep_id（仅填充空缺字段），然后归档被合并的诗"),
+		fuego.OptionTags("工具模块"),
+	)
+
+	// [工具模块] 作者查重
+	fuego.Get(adminMgmt, "/tools/author-dedup/scan", toolsHandler.AuthorDedupScan,
+		fuego.OptionSummary("扫描重复作者"),
+		fuego.OptionOverrideDescription("扫描 authors 表中的重复作者（按姓名或姓名+朝代），返回重复组"),
+		fuego.OptionTags("工具模块"),
+	)
+	fuego.Post(adminMgmt, "/tools/author-dedup/merge", toolsHandler.AuthorDedupMerge,
+		fuego.OptionSummary("合并重复作者"),
+		fuego.OptionOverrideDescription("合并重复作者：将 merge_ids 的诗歌关联到 keep_id，合并 biography/dynasty，删除被合并记录"),
+		fuego.OptionTags("工具模块"),
+	)
+
+	// [工具模块] 清理作者繁体名
+	fuego.Post(adminMgmt, "/tools/cleanup-author-names", toolsHandler.CleanupAuthorNames,
+		fuego.OptionSummary("清理作者繁体名"),
+		fuego.OptionOverrideDescription("清理 name = name_traditional 的作者记录，清空冗余的 name_traditional"),
+		fuego.OptionTags("工具模块"),
+	)
+
+	// [工具模块] 作者姓名转简体
+	fuego.Post(adminMgmt, "/tools/cleanup-author-names-sc", toolsHandler.EnsureAuthorNamesSimplified,
+		fuego.OptionSummary("作者姓名转简体"),
+		fuego.OptionOverrideDescription("将 name 中的繁体字转为简体，原值保留到 name_traditional"),
+		fuego.OptionTags("工具模块"),
+	)
 }

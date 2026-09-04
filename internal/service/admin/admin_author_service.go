@@ -158,6 +158,42 @@ func (s *AdminAuthorService) GenerateAuthorsFromPoems(ctx context.Context) (*adm
 	return result, nil
 }
 
+// AuthorDedupScan 扫描重复作者组
+func (s *AdminAuthorService) AuthorDedupScan(ctx context.Context, matchBy string) (*adminmodel.AdminToolAuthorDedupScanResponse, error) {
+	result, err := s.authorRepo.AuthorDedupScan(ctx, matchBy)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("扫描重复作者失败: %v", err)}
+	}
+	return result, nil
+}
+
+// AuthorDedupMerge 合并重复作者
+func (s *AdminAuthorService) AuthorDedupMerge(ctx context.Context, keepID int64, mergeIDs []int64) (*adminmodel.AdminToolAuthorDedupMergeResponse, error) {
+	result, err := s.authorRepo.AuthorDedupMerge(ctx, keepID, mergeIDs)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("合并重复作者失败: %v", err)}
+	}
+	return result, nil
+}
+
+// CleanupAuthorNames 清理 name = name_traditional 的记录
+func (s *AdminAuthorService) CleanupAuthorNames(ctx context.Context) (int64, string, error) {
+	cleaned, err := s.authorRepo.CleanupAuthorNames(ctx)
+	if err != nil {
+		return 0, "", fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("清理作者繁体名失败: %v", err)}
+	}
+	return cleaned, fmt.Sprintf("清理完成：已将 %d 个作者的繁体名清空（与简体相同）", cleaned), nil
+}
+
+// EnsureAuthorNamesSimplified 确保 authors 表的 name 字段为简体字
+func (s *AdminAuthorService) EnsureAuthorNamesSimplified(ctx context.Context) (int64, string, error) {
+	processed, err := s.authorRepo.EnsureAuthorNamesSimplified(ctx)
+	if err != nil {
+		return 0, "", fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("作者姓名转简体失败: %v", err)}
+	}
+	return processed, fmt.Sprintf("处理完成：已将 %d 个作者的姓名转为简体（原值保留为繁体）", processed), nil
+}
+
 // toAdminAuthorResponse 转换 Author 为 AdminAuthorResponse
 func toAdminAuthorResponse(a model.Author, poemCount int64) adminmodel.AdminAuthorResponse {
 	return adminmodel.AdminAuthorResponse{

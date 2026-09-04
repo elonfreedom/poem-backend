@@ -70,8 +70,12 @@ func (r *PoemRepository) EnsurePinyinForAllPoems(ctx context.Context) (int, erro
 }
 
 // EnsureSimplifiedForAllPoems 为所有缺少简体的诗歌生成简体（繁体 → 简体）
+// 同时补充 authors 表中 name_traditional 为空的记录
 // 应在迁移完成后调用，确保存量数据也有简体字段
 func (r *PoemRepository) EnsureSimplifiedForAllPoems(ctx context.Context) (int, error) {
+	successCount := 0
+
+	// 1. 为诗歌生成简体字段
 	rows, err := r.db.Query(ctx, `
 		SELECT id, title, author, content, translation, appreciation FROM poems
 		WHERE title_sc = '' OR title_sc IS NULL
@@ -84,7 +88,6 @@ func (r *PoemRepository) EnsureSimplifiedForAllPoems(ctx context.Context) (int, 
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
 
 	type poemData struct {
 		id            int64
@@ -98,41 +101,82 @@ func (r *PoemRepository) EnsureSimplifiedForAllPoems(ctx context.Context) (int, 
 	for rows.Next() {
 		var p poemData
 		if err := rows.Scan(&p.id, &p.title, &p.author, &p.content, &p.translation, &p.appreciation); err != nil {
+			rows.Close()
 			return 0, err
 		}
 		poems = append(poems, p)
 	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
+	rows.Close()
 
-	if len(poems) == 0 {
-		return 0, nil
-	}
+	if len(poems) > 0 {
+		log.Printf("正在为 %d 首诗歌生成简体...", len(poems))
 
-	log.Printf("正在为 %d 首诗歌生成简体...", len(poems))
+		for _, p := range poems {
+			titleSC := convert.MustTraditionalToSimplified(p.title)
+			authorSC := convert.MustTraditionalToSimplified(p.author)
+			contentSC := convert.MustTraditionalToSimplified(p.content)
+			translationSC := convert.MustTraditionalToSimplified(p.translation)
+			appreciationSC := convert.MustTraditionalToSimplified(p.appreciation)
 
-	successCount := 0
-	for _, p := range poems {
-		titleSC := convert.MustTraditionalToSimplified(p.title)
-		authorSC := convert.MustTraditionalToSimplified(p.author)
-		contentSC := convert.MustTraditionalToSimplified(p.content)
-		translationSC := convert.MustTraditionalToSimplified(p.translation)
-		appreciationSC := convert.MustTraditionalToSimplified(p.appreciation)
-
-		_, err := r.db.Exec(ctx, `
-			UPDATE poems SET title_sc = $1, author_sc = $2, content_sc = $3,
-			                   translation_sc = $4, appreciation_sc = $5, updated_at = NOW()
-			WHERE id = $6
-		`, titleSC, authorSC, contentSC, translationSC, appreciationSC, p.id)
-		if err != nil {
-			log.Printf("更新 ID=%d 失败: %v", p.id, err)
-			continue
+			_, err := r.db.Exec(ctx, `
+				UPDATE poems SET title_sc = $1, author_sc = $2, content_sc = $3,
+				                   translation_sc = $4, appreciation_sc = $5, updated_at = NOW()
+				WHERE id = $6
+			`, titleSC, authorSC, contentSC, translationSC, appreciationSC, p.id)
+			if err != nil {
+				log.Printf("更新诗歌 ID=%d 失败: %v", p.id, err)
+				continue
+			}
+			successCount++
 		}
-		successCount++
+		log.Printf("诗歌简体生成完成: 成功 %d/%d", successCount, len(poems))
 	}
 
-	log.Printf("简体生成完成: 成功 %d/%d", successCount, len(poems))
+	// 2. 为 authors 表补充 name_traditional
+	authorRows, err := r.db.Query(ctx, `
+		SELECT id, name FROM authors
+		WHERE name_traditional = '' OR name_traditional IS NULL
+		ORDER BY id
+	`)
+	if err != nil {
+		return successCount, err
+	}
+
+	type authorData struct {
+		id   int64
+		name string
+	}
+	var authors []authorData
+	for authorRows.Next() {
+		var a authorData
+		if err := authorRows.Scan(&a.id, &a.name); err != nil {
+			authorRows.Close()
+			return successCount, err
+		}
+		authors = append(authors, a)
+	}
+	authorRows.Close()
+
+	if len(authors) > 0 {
+		log.Printf("正在为 %d 个作者生成繁体名...", len(authors))
+
+		authorSuccess := 0
+		for _, a := range authors {
+			nameTraditional := convert.MustSimplifiedToTraditional(a.name)
+			_, err := r.db.Exec(ctx, `
+				UPDATE authors SET name_traditional = $1, updated_at = NOW()
+				WHERE id = $2
+			`, nameTraditional, a.id)
+			if err != nil {
+				log.Printf("更新作者 ID=%d 失败: %v", a.id, err)
+				continue
+			}
+			authorSuccess++
+		}
+		log.Printf("作者繁体名生成完成: 成功 %d/%d", authorSuccess, len(authors))
+		successCount += authorSuccess
+	}
+
 	return successCount, nil
 }
 

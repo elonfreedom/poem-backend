@@ -324,8 +324,9 @@ type AdminAuthorOptionResponse struct {
 }
 
 // AdminAuthorBatchMatchRequest 批量匹配诗歌请求
+// poetry_ids 为空数组时处理全部诗歌，非空时只处理指定 ID
 type AdminAuthorBatchMatchRequest struct {
-	PoetryIDs []int64 `json:"poetry_ids" validate:"required,min=1" description:"诗歌ID数组"`
+	PoetryIDs []int64 `json:"poetry_ids" description:"诗歌ID数组（空数组=全部诗歌）"`
 }
 
 // AdminAuthorBatchMatchResponse 批量匹配结果
@@ -375,9 +376,56 @@ type AdminCheckinStats struct {
 
 // AdminToolGenerateAuthorsResponse 从诗歌提取作者工具响应
 type AdminToolGenerateAuthorsResponse struct {
-	TotalUnique int `json:"total_unique" description:"诗歌中唯一作者数"`
-	Created     int `json:"created" description:"新建作者数"`
-	Skipped     int `json:"skipped" description:"已存在跳过数"`
+	TotalUnique  int `json:"total_unique" description:"诗歌中唯一作者数"`
+	Created      int `json:"created" description:"新建作者数"`
+	Skipped      int `json:"skipped" description:"已存在跳过数"`
+	WithDynasty  int `json:"with_dynasty" description:"提取时附带朝代信息的作者数"`
+	Backfilled   int `json:"backfilled" description:"回填朝代信息的已有作者数"`
+}
+
+// ========== 作者查重工具 ==========
+
+// AdminToolAuthorDedupScanRequest 扫描重复作者请求
+type AdminToolAuthorDedupScanRequest struct {
+	MatchBy string `query:"match_by" description:"匹配方式: name(仅姓名) 或 name_dynasty(姓名+朝代)"`
+}
+
+// AdminToolAuthorDedupScanResponse 扫描重复作者响应
+type AdminToolAuthorDedupScanResponse struct {
+	TotalScanned int                       `json:"total_scanned" description:"扫描的作者总数"`
+	TotalGroups  int                       `json:"total_groups" description:"重复组总数"`
+	Groups       []AdminToolAuthorDedupGroup `json:"groups" description:"重复组列表"`
+}
+
+// AdminToolAuthorDedupGroup 重复作者组
+type AdminToolAuthorDedupGroup struct {
+	GroupKey     string                       `json:"group_key" description:"组标识（匹配键）"`
+	MatchReason  string                       `json:"match_reason" description:"匹配原因"`
+	AuthorCount  int                          `json:"author_count" description:"组内作者数"`
+	Authors      []AdminToolAuthorDedupItem   `json:"authors" description:"组内作者列表"`
+}
+
+// AdminToolAuthorDedupItem 重复组内的作者
+type AdminToolAuthorDedupItem struct {
+	ID              int64  `json:"id" description:"作者ID"`
+	Name            string `json:"name" description:"作者名"`
+	Dynasty         string `json:"dynasty" description:"朝代"`
+	Biography       string `json:"biography" description:"作者简介"`
+	PoemCount       int64  `json:"poem_count" description:"关联诗歌数量"`
+}
+
+// AdminToolAuthorDedupMergeRequest 合并重复作者请求
+type AdminToolAuthorDedupMergeRequest struct {
+	KeepID   int64   `json:"keep_id" validate:"required" description:"保留的作者ID"`
+	MergeIDs []int64 `json:"merge_ids" validate:"required,min=1" description:"要合并的作者ID（合并后删除）"`
+}
+
+// AdminToolAuthorDedupMergeResponse 合并重复作者响应
+type AdminToolAuthorDedupMergeResponse struct {
+	KeepID          int64  `json:"keep_id" description:"保留的作者ID"`
+	Merged          int    `json:"merged" description:"合并的作者数"`
+	ReassignedPoems int64  `json:"reassigned_poems" description:"重新关联的诗歌数"`
+	Message         string `json:"message" description:"处理结果描述"`
 }
 
 // ========== 简繁体工具 ==========
@@ -421,10 +469,10 @@ type AdminToolBatchConvertCharsResponse struct {
 // AdminToolDedupScanRequest 扫描重复组请求
 type AdminToolDedupScanRequest struct {
 	MatchFields   []string `json:"match_fields" validate:"required,min=1,dive,oneof=title author content" description:"匹配维度 title/author/content"`
-	StatusFilter  string   `json:"status_filter,omitempty" description:"按状态筛选 published/draft/archived"`
+	StatusFilter  string   `json:"status_filter,omitempty" description:"按状态筛选 published/draft/archived/non_archived(排除已归档)"`
 	DynastyFilter string   `json:"dynasty_filter,omitempty" description:"按朝代筛选 如 唐"`
 	Page          int      `json:"page" description:"页码 默认1"`
-	PageSize      int      `json:"page_size" description:"每页组数 默认20 最大50"`
+	PageSize      int      `json:"page_size" description:"每页组数 默认20 最大500"`
 }
 
 // AdminToolDedupScanResponse 扫描重复组响应
@@ -478,4 +526,18 @@ type AdminToolDedupExecuteResponse struct {
 	Archived int    `json:"archived" description:"归档数量"`
 	Deleted  int    `json:"deleted" description:"删除数量"`
 	Message  string `json:"message" description:"处理结果描述"`
+}
+
+// AdminToolDedupMergeRequest 合并重复诗文请求
+type AdminToolDedupMergeRequest struct {
+	KeepID    int64   `json:"keep_id" validate:"required" description:"保留的诗 ID"`
+	MergeIDs  []int64 `json:"merge_ids" validate:"required,min=1" description:"要合并的诗 ID（合并后会被归档）"`
+}
+
+// AdminToolDedupMergeResponse 合并重复诗文响应
+type AdminToolDedupMergeResponse struct {
+	KeepID       int64    `json:"keep_id" description:"保留的诗 ID"`
+	MergedFields []string `json:"merged_fields" description:"实际合并的字段列表"`
+	Archived     int      `json:"archived" description:"归档的诗文数量"`
+	Message      string   `json:"message" description:"处理结果描述"`
 }

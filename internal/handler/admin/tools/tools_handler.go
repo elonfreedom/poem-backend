@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/go-fuego/fuego"
 
@@ -115,6 +116,7 @@ func (h *ToolsHandler) BatchConvertChars(c fuego.ContextWithBody[adminmodel.Admi
 func (h *ToolsHandler) DedupScan(c fuego.ContextWithBody[adminmodel.AdminToolDedupScanRequest]) (*response.APIResponse[adminmodel.AdminToolDedupScanResponse], error) {
 	body, err := c.Body()
 	if err != nil {
+		log.Printf("[DedupScan] 请求体解析失败: %v", err)
 		return nil, fuego.BadRequestError{Title: "invalid_request", Detail: fmt.Sprintf("请求体解析失败: %v", err)}
 	}
 
@@ -139,4 +141,89 @@ func (h *ToolsHandler) DedupExecute(c fuego.ContextWithBody[adminmodel.AdminTool
 	}
 
 	return response.OK(*result), nil
+}
+
+// DedupMerge 智能合并重复诗文
+// 将 merge_ids 中的诗文数据合并到 keep_id 对应的诗中，仅填充保留诗的空缺字段
+// 合并后将被合并的诗归档（status→archived）
+func (h *ToolsHandler) DedupMerge(c fuego.ContextWithBody[adminmodel.AdminToolDedupMergeRequest]) (*response.APIResponse[adminmodel.AdminToolDedupMergeResponse], error) {
+	body, err := c.Body()
+	if err != nil {
+		log.Printf("[DedupMerge] 请求体解析失败: %v", err)
+		return nil, fuego.BadRequestError{Title: "invalid_request", Detail: fmt.Sprintf("请求体解析失败: %v", err)}
+	}
+
+	result, err := h.poemService.DedupMerge(c.Context(), body.KeepID, body.MergeIDs)
+	if err != nil {
+		return nil, err // 透传 Service 错误
+	}
+
+	return response.OK(*result), nil
+}
+
+// ==================== 作者查重工具 ====================
+
+// AuthorDedupScan 扫描重复作者组
+func (h *ToolsHandler) AuthorDedupScan(c fuego.ContextNoBody) (*response.APIResponse[adminmodel.AdminToolAuthorDedupScanResponse], error) {
+	matchBy := c.QueryParam("match_by")
+	result, err := h.authorService.AuthorDedupScan(c.Context(), matchBy)
+	if err != nil {
+		return nil, err
+	}
+	return response.OK(*result), nil
+}
+
+// AuthorDedupMerge 合并重复作者
+func (h *ToolsHandler) AuthorDedupMerge(c fuego.ContextWithBody[adminmodel.AdminToolAuthorDedupMergeRequest]) (*response.APIResponse[adminmodel.AdminToolAuthorDedupMergeResponse], error) {
+	body, err := c.Body()
+	if err != nil {
+		log.Printf("[AuthorDedupMerge] 请求体解析失败: %v", err)
+		return nil, fuego.BadRequestError{Title: "invalid_request", Detail: fmt.Sprintf("请求体解析失败: %v", err)}
+	}
+
+	result, err := h.authorService.AuthorDedupMerge(c.Context(), body.KeepID, body.MergeIDs)
+	if err != nil {
+		return nil, err
+	}
+	return response.OK(*result), nil
+}
+
+// ==================== 清理作者繁体名工具 ====================
+
+// CleanupAuthorNamesResponse 清理作者繁体名响应
+type CleanupAuthorNamesResponse struct {
+	Cleaned int64  `json:"cleaned" description:"清理的记录数"`
+	Message string `json:"message" description:"处理结果描述"`
+}
+
+// CleanupAuthorNames 清理 name = name_traditional 的作者记录
+func (h *ToolsHandler) CleanupAuthorNames(c fuego.ContextNoBody) (*response.APIResponse[CleanupAuthorNamesResponse], error) {
+	cleaned, message, err := h.authorService.CleanupAuthorNames(c.Context())
+	if err != nil {
+		return nil, err
+	}
+	return response.OK(CleanupAuthorNamesResponse{
+		Cleaned: cleaned,
+		Message: message,
+	}), nil
+}
+
+// ==================== 作者姓名转简体工具 ====================
+
+// EnsureAuthorNamesSimplifiedResponse 作者姓名转简体响应
+type EnsureAuthorNamesSimplifiedResponse struct {
+	Processed int64  `json:"processed" description:"处理的记录数"`
+	Message   string `json:"message" description:"处理结果描述"`
+}
+
+// EnsureAuthorNamesSimplified 确保 authors 表的 name 字段为简体字
+func (h *ToolsHandler) EnsureAuthorNamesSimplified(c fuego.ContextNoBody) (*response.APIResponse[EnsureAuthorNamesSimplifiedResponse], error) {
+	processed, message, err := h.authorService.EnsureAuthorNamesSimplified(c.Context())
+	if err != nil {
+		return nil, err
+	}
+	return response.OK(EnsureAuthorNamesSimplifiedResponse{
+		Processed: processed,
+		Message:   message,
+	}), nil
 }

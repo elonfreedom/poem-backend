@@ -36,7 +36,7 @@ func (s *AdminPoemService) ExistsByTitleAuthorFirstLine(ctx context.Context, tit
 
 // List 分页获取诗歌列表
 // searchScope: "title" 只搜标题, "author" 只搜作者, 空或其他值搜全部
-func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword, dynasty string, authorID *int64, searchScope string) (*response.PageData[adminmodel.AdminPoemResponse], error) {
+func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword, dynasty string, authorID *int64, searchScope string, hasTranslation, hasAppreciation string) (*response.PageData[adminmodel.AdminPoemResponse], error) {
 	if page < 1 {
 		page = 1
 	}
@@ -44,7 +44,7 @@ func (s *AdminPoemService) List(ctx context.Context, page, pageSize int, categor
 		pageSize = 20
 	}
 
-	poems, total, err := s.poemRepo.ListAll(ctx, page, pageSize, categoryID, status, keyword, dynasty, authorID, searchScope)
+	poems, total, err := s.poemRepo.ListAll(ctx, page, pageSize, categoryID, status, keyword, dynasty, authorID, searchScope, hasTranslation, hasAppreciation)
 	if err != nil {
 		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询诗歌列表失败: %v", err)}
 	}
@@ -325,7 +325,7 @@ func (s *AdminPoemService) DedupScan(ctx context.Context, matchFields []string, 
 	if page < 1 {
 		page = 1
 	}
-	if pageSize < 1 || pageSize > 50 {
+	if pageSize < 1 || pageSize > 500 {
 		pageSize = 20
 	}
 
@@ -398,6 +398,172 @@ func (s *AdminPoemService) DedupExecute(ctx context.Context, archiveIDs, deleteI
 	}
 
 	result.Message = fmt.Sprintf("处理完成：归档 %d 首，删除 %d 首", result.Archived, result.Deleted)
+	return result, nil
+}
+
+// DedupMerge 智能合并重复诗文
+// 将 merge_ids 中的诗文数据合并到 keep_id 对应的诗中，仅填充保留诗的空缺字段
+// 合并后将被合并的诗归档（status→archived）
+func (s *AdminPoemService) DedupMerge(ctx context.Context, keepID int64, mergeIDs []int64) (*adminmodel.AdminToolDedupMergeResponse, error) {
+	result := &adminmodel.AdminToolDedupMergeResponse{
+		KeepID:       keepID,
+		MergedFields: []string{},
+	}
+
+	// 1. 获取保留诗
+	keepPoem, err := s.poemRepo.GetByID(ctx, keepID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fuego.NotFoundError{Title: "poem not found", Detail: fmt.Sprintf("保留的诗文不存在: id=%d", keepID)}
+		}
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询保留诗文失败: %v", err)}
+	}
+
+	// 2. 过滤掉 keep_id（防止自合并）
+	filteredIDs := make([]int64, 0, len(mergeIDs))
+	for _, id := range mergeIDs {
+		if id != keepID {
+			filteredIDs = append(filteredIDs, id)
+		}
+	}
+
+	if len(filteredIDs) == 0 {
+		result.Message = "没有需要合并的诗文"
+		return result, nil
+	}
+
+	// 3. 获取要合并的诗（不存在的 ID 会被自动跳过）
+	mergePoems, err := s.poemRepo.FetchPoemsByIDs(ctx, filteredIDs)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("查询待合并诗文失败: %v", err)}
+	}
+
+	if len(mergePoems) == 0 {
+		result.Message = "没有找到有效的待合并诗文"
+		return result, nil
+	}
+
+	// 4. 合并字段（仅当保留诗该字段为空时才填充）
+	mergedFields := []string{}
+
+	// 文本字段合并
+	textFields := []struct {
+		name     string
+		keepPtr  *string
+		getValue func(p repository.DedupPoem) string
+	}{
+		{"translation", &keepPoem.Translation, func(p repository.DedupPoem) string { return p.Translation }},
+		{"appreciation", &keepPoem.Appreciation, func(p repository.DedupPoem) string { return p.Appreciation }},
+	}
+
+	for _, f := range textFields {
+		if *f.keepPtr == "" {
+			for _, p := range mergePoems {
+				val := f.getValue(p)
+				if val != "" {
+					*f.keepPtr = val
+					mergedFields = append(mergedFields, f.name)
+					break
+				}
+			}
+		}
+	}
+
+	// 拼音字段和 cover_url 合并（DedupPoem 不含这些字段，需要从完整 Poem 获取）
+	needFullPoem := keepPoem.TitlePinyin == "" || keepPoem.ContentPinyin == "" || keepPoem.CoverURL == ""
+	if needFullPoem {
+		for _, mp := range mergePoems {
+			mergeFull, err := s.poemRepo.GetByID(ctx, mp.ID)
+			if err != nil {
+				continue // 跳过不存在的
+			}
+			if keepPoem.TitlePinyin == "" && mergeFull.TitlePinyin != "" {
+				keepPoem.TitlePinyin = mergeFull.TitlePinyin
+				mergedFields = append(mergedFields, "title_pinyin")
+			}
+			if keepPoem.ContentPinyin == "" && mergeFull.ContentPinyin != "" {
+				keepPoem.ContentPinyin = mergeFull.ContentPinyin
+				mergedFields = append(mergedFields, "content_pinyin")
+			}
+			if keepPoem.CoverURL == "" && mergeFull.CoverURL != "" {
+				keepPoem.CoverURL = mergeFull.CoverURL
+				mergedFields = append(mergedFields, "cover_url")
+			}
+			// 如果所有需要的字段都有了，提前退出
+			if keepPoem.TitlePinyin != "" && keepPoem.ContentPinyin != "" && keepPoem.CoverURL != "" {
+				break
+			}
+		}
+	}
+
+	// category_id 合并
+	if keepPoem.CategoryID == nil {
+		for _, p := range mergePoems {
+			if p.CategoryID != nil {
+				keepPoem.CategoryID = p.CategoryID
+				mergedFields = append(mergedFields, "category_id")
+				break
+			}
+		}
+	}
+
+	// tags 合并（取保留诗 + 所有合并诗的并集去重）
+	if len(keepPoem.Tags) == 0 {
+		// 保留诗没有标签，从合并诗中收集所有标签
+		tagSet := make(map[string]bool)
+		for _, p := range mergePoems {
+			for _, tag := range p.Tags {
+				tagSet[tag] = true
+			}
+		}
+		if len(tagSet) > 0 {
+			allTags := make([]string, 0, len(tagSet))
+			for tag := range tagSet {
+				allTags = append(allTags, tag)
+			}
+			sort.Strings(allTags)
+			keepPoem.Tags = allTags
+			mergedFields = append(mergedFields, "tags")
+		}
+	} else {
+		// 保留诗已有标签，补充合并诗独有的标签
+		existingTags := make(map[string]bool)
+		for _, tag := range keepPoem.Tags {
+			existingTags[tag] = true
+		}
+		newTags := []string{}
+		for _, p := range mergePoems {
+			for _, tag := range p.Tags {
+				if !existingTags[tag] {
+					existingTags[tag] = true
+					newTags = append(newTags, tag)
+				}
+			}
+		}
+		if len(newTags) > 0 {
+			sort.Strings(newTags)
+			keepPoem.Tags = append(keepPoem.Tags, newTags...)
+			mergedFields = append(mergedFields, "tags")
+		}
+	}
+
+	// 5. 保存更新后的保留诗
+	keepPoem.UpdatedAt = time.Now()
+	if err := s.poemRepo.Update(ctx, keepPoem); err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("更新保留诗文失败: %v", err)}
+	}
+
+	// 6. 归档被合并的诗
+	archived, err := s.poemRepo.ArchivePoems(ctx, filteredIDs)
+	if err != nil {
+		return nil, fuego.InternalServerError{Title: "database error", Detail: fmt.Sprintf("归档重复诗文失败: %v", err)}
+	}
+
+	result.MergedFields = mergedFields
+	result.Archived = int(archived)
+	result.Message = fmt.Sprintf("合并完成：补充了 %s，已归档 %d 首重复诗文",
+		strings.Join(mergedFields, "、"), result.Archived)
+
 	return result, nil
 }
 

@@ -9,6 +9,7 @@ type Author struct {
 	NameTraditional string    `json:"name_traditional" db:"name_traditional" description:"作者名（繁体）"`
 	Dynasty         string    `json:"dynasty" db:"dynasty" description:"朝代"`
 	Biography       string    `json:"biography" db:"biography" description:"作者简介"`
+	PoemCount       int64     `json:"poem_count" db:"poem_count" description:"关联诗歌数量"`
 	CreatedAt       time.Time `json:"created_at" db:"created_at" description:"创建时间"`
 	UpdatedAt       time.Time `json:"updated_at" db:"updated_at" description:"更新时间"`
 }

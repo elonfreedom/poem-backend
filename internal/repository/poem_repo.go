@@ -235,7 +235,7 @@ type PoemWithCategory struct {
 
 // ListAll 获取诗歌列表（admin 用，不过滤 status）
 // searchScope: "title" 只搜标题, "author" 只搜作者, 空或其他值搜全部
-func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword, dynasty string, authorID *int64, searchScope string) ([]PoemWithCategory, int64, error) {
+func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, categoryID *int64, status, keyword, dynasty string, authorID *int64, searchScope string, hasTranslation, hasAppreciation string) ([]PoemWithCategory, int64, error) {
 	where := "WHERE 1=1"
 	args := []interface{}{}
 	argIdx := 1
@@ -259,6 +259,16 @@ func (r *PoemRepository) ListAll(ctx context.Context, page, pageSize int, catego
 		where += fmt.Sprintf(" AND p.author_id = $%d", argIdx)
 		args = append(args, *authorID)
 		argIdx++
+	}
+	if hasTranslation == "true" {
+		where += " AND p.translation IS NOT NULL AND p.translation != ''"
+	} else if hasTranslation == "false" {
+		where += " AND (p.translation IS NULL OR p.translation = '')"
+	}
+	if hasAppreciation == "true" {
+		where += " AND p.appreciation IS NOT NULL AND p.appreciation != ''"
+	} else if hasAppreciation == "false" {
+		where += " AND (p.appreciation IS NULL OR p.appreciation = '')"
 	}
 	if keyword != "" {
 		likePattern := "%" + keyword + "%"
@@ -441,9 +451,13 @@ func (r *PoemRepository) ScanDedupGroups(ctx context.Context, matchFields []stri
 	argIdx := 1
 
 	if statusFilter != "" {
-		where += fmt.Sprintf(" AND p.status = $%d", argIdx)
-		args = append(args, statusFilter)
-		argIdx++
+		if statusFilter == "non_archived" {
+			where += " AND p.status != 'archived'"
+		} else {
+			where += fmt.Sprintf(" AND p.status = $%d", argIdx)
+			args = append(args, statusFilter)
+			argIdx++
+		}
 	}
 	if dynastyFilter != "" {
 		where += fmt.Sprintf(" AND COALESCE(a.dynasty, p.dynasty) = $%d", argIdx)
